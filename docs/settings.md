@@ -226,6 +226,7 @@ The same rules are used in Auto Retry and Auto Foley.
 **Word swaps.** See [Word swaps](swaps.md).
 
 - **Swap words in each reply** is off by default. On, each new reply and each refine gets the swaps under it. No model is asked, so it costs nothing.
+  - **Ask before swapping** is under it, and off by default. On, a reply's swaps wait for your yes, the same way **Ask before saving a refine** holds a refine. A refine with swaps in it asks once for both. See [Asking first](swaps.md#asking-first).
 - **Add a swap** adds one. Each swap has **Find**, **Put instead** and **Keep the same pick in a chat**. **Delete** asks first.
 
 ## Log

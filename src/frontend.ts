@@ -199,7 +199,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "swaps",
     label: "Word swaps",
     what: "The words and phrases swapped in each reply. The names already picked in each chat stay on your account and are not in a file.",
-    keys: ["swapOn", "swaps"],
+    keys: ["swapOn", "swapAsk", "swaps"],
   },
   {
     id: "switches",
@@ -641,6 +641,8 @@ const CONFIG = {
   // line, what to put instead, one choice per line, and whether a chat keeps
   // the same pick.
   swapOn: false,
+  // Ask before swapping: a reply's swaps wait for a yes. Off by default.
+  swapAsk: false,
   swaps: [] as Swap[],
   // Phrases this chat has worn out. Off by default, since it reads the chat's
   // replies. The list goes wherever a block holds {{overused}}.
@@ -8561,8 +8563,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   // can draw a modal: without this, a Lumiverse with no showModal dropped the
   // whole refine on the floor and said nothing, which reads as the button not
   // working.
-  let pending: { chatId: any; messageId: any; before: string; after: string; at: number; held?: string } | null =
-    null;
+  // kind is swap for word swaps on their own, and swapped lists the swaps in
+  // the write, so the question can say what it is.
+  let pending: {
+    chatId: any;
+    messageId: any;
+    before: string;
+    after: string;
+    at: number;
+    held?: string;
+    kind?: string;
+    swapped?: string[];
+  } | null = null;
+  // What the question is about, in its own words.
+  const pendingIsSwap = (one: { kind?: string } | null) => !!one && one.kind === "swap";
+  const pendingHasSwaps = (one: { swapped?: string[] } | null) => !!one && Array.isArray(one.swapped) && one.swapped.length > 0;
 
   function takePending(yes: boolean) {
     const one = pending;
@@ -8582,9 +8597,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         before: one.before,
         after: one.after,
       });
-      log("answer", "accepted a refine", true);
+      log("answer", pendingIsSwap(one) ? "accepted word swaps" : "accepted a refine", true);
     } else {
-      log("answer", "turned a refine down");
+      log("answer", pendingIsSwap(one) ? "turned word swaps down" : "turned a refine down");
       toast("Left as it was.", true);
     }
     paint();
@@ -8594,9 +8609,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const one = pending as NonNullable<typeof pending>;
     const wrap = card(
       "Waiting for you",
-      "This refine is written and nothing has been saved. Read both and say which one stands.",
+      pendingIsSwap(one)
+        ? "These word swaps are made and nothing has been saved. Read both and say which one stands."
+        : "This refine is written and nothing has been saved. Read both and say which one stands." +
+            (pendingHasSwaps(one) ? " The rewrite includes word swaps." : ""),
       new Date(one.at).toTimeString().slice(0, 5),
     );
+    wrap.setAttribute("data-arf-pending-kind", pendingIsSwap(one) ? "swap" : pendingHasSwaps(one) ? "refine-swaps" : "refine");
     // Marked the same way as every other before and after, with the switch
     // between the two views.
     wrap.appendChild(changedHead("What changed"));
@@ -8612,7 +8631,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     big.addEventListener("click", () =>
       openBig(
         "Both versions",
-        "As it is now\n\n" + one.before + "\n\n---\n\nAfter the refine\n\n" + one.after,
+        "As it is now\n\n" + one.before + "\n\n---\n\n" + (pendingIsSwap(one) ? "After the word swaps" : "After the refine") + "\n\n" + one.after,
       ),
     );
     row.appendChild(yes);
@@ -11998,6 +12017,16 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "Off by default. On, each new reply and each refine gets the swaps below. The Log says what was swapped.",
       }),
     );
+    wrap.appendChild(
+      fieldRow({
+        key: "swapAsk",
+        label: "Ask before swapping",
+        type: "bool",
+        needs: { key: "swapOn" },
+        under: true,
+        hint: "Off by default. On, a reply's swaps wait for your yes, the same way Ask before saving a refine does.",
+      }),
+    );
     const under = hangsOff(el("div", "arf-col arf-under"), "swapOn", "word swaps");
     under.setAttribute("data-arf-swaps", "1");
     const list = el("div", "arf-col");
@@ -12110,8 +12139,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       unfold(box, true);
       persist(true);
       sayFull();
+      // The new Find box gets the cursor with a mouse only. On a touch
+      // screen a box with the cursor in it opens the keyboard, which nobody
+      // asked for by adding a swap.
+      let touchy = lastPointer === "touch";
+      try {
+        if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) touchy = true;
+      } catch (_) {}
       const first = box.querySelector("textarea") as HTMLTextAreaElement | null;
-      if (first)
+      if (first && !touchy)
         try {
           first.focus({ preventScroll: true } as any);
         } catch (_) {}
@@ -19058,9 +19094,11 @@ export function setup(ctx: Ctx, overrides?: any) {
               after: String(msg.after || ""),
               at: Date.now(),
               held: String(msg.held || ""),
+              kind: msg.kind === "swap" ? "swap" : "refine",
+              swapped: Array.isArray(msg.swapped) ? msg.swapped.map((x: any) => String(x)) : [],
             };
                   setBadge("1");
-            log("answer", "a refine is waiting for you", true);
+            log("answer", msg.kind === "swap" ? "word swaps are waiting for you" : "a refine is waiting for you", true);
             ping();
             paint();
             // And as a modal where the host can draw one, since this is a
@@ -19225,7 +19263,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (tabInView()) return;
     showCard({
       key: "ask:" + undoKey(msg.chatId, msg.messageId),
-      title: "Save this refine?",
+      title: pendingIsSwap(msg) ? "Save these word swaps?" : pendingHasSwaps(msg) ? "Save this refine and its word swaps?" : "Save this refine?",
       before: String(msg.before || ""),
       after: String(msg.after || ""),
       held: String(msg.held || ""),

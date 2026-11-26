@@ -7,6 +7,7 @@
 - Each swap has what to find and what to put instead. With several choices, one is picked at random.
 - **Keep the same pick in a chat** gives a found word the same choice in every later reply of that chat, so a character is not renamed partway through.
 - A swap with nothing to put instead takes the words out.
+- **Ask before swapping**, off by default, holds a reply's swaps until you say yes.
 - They are off by default. Turn them on in the **Word swaps** card on the **Limits** tab.
 
 ## Steps
@@ -17,7 +18,8 @@
 4. Under **Find**, type a word or a phrase. Put several on their own lines to swap them all with the same choices.
 5. Under **Put instead**, type a choice. Put several on their own lines to have one picked at random. Leave it empty to take the words out.
 6. Leave **Keep the same pick in a chat** on for names. Turn it off for words where a new pick each time is fine.
-7. The swaps are used on the next reply. The Log says what was swapped.
+7. To see each reply's swaps before they are saved, turn on **Ask before swapping**, under **Swap words in each reply**.
+8. The swaps are used on the next reply. The Log says what was swapped.
 
 ## What it sends
 
@@ -100,6 +102,16 @@ Swaps are not made:
 - The reply's thinking, in any format Auto Refine recognizes, while **Keep the reply's own reasoning out of the refine** is on. See [The reply's own reasoning](prompt.md#the-replys-own-reasoning).
 - Code, links, tags, HTML entities, tables and divider lines. The words between two tags are still swapped. The tags themselves are not.
 - Another extension's blocks inside a reply.
+
+## Asking first
+
+**Ask before swapping** is under **Swap words in each reply**, and off by default. On:
+
+- A reply's swaps are not saved straight away. They wait as a question, the same way **Ask before saving a refine** holds a refine.
+- The question shows what changed. It is in the **Waiting for you** card at the top of the tab, and comes up on screen as **Save these word swaps?** when the tab is not open.
+- **Accept it** saves the swaps. **Turn it down** leaves the reply as it was.
+- A name picked for a reply is only kept for the chat when you accept it.
+- A refine with swaps in it asks once for both, even with **Ask before saving a refine** off. The question says the rewrite includes word swaps. A refine with no swaps in it is saved as usual.
 
 ## Putting it back
 

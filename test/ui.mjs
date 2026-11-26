@@ -16749,9 +16749,21 @@ for (const [label, viewport, touch, zoom] of [
     let shrank = false;
     for (let i = 1; i < heights.length; i++) if (heights[i - 1] > 0 && heights[i] < heights[i - 1] - 1) shrank = true;
     ok(label + ": turned on, the swaps open over several frames", steps >= 3 && heights[heights.length - 1] > 0 && !shrank, heights.join(","));
-    // Add a swap and fill it in.
-    await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-add]").click());
+    // Add a swap and fill it in. On a phone with a real tap, and no box gets
+    // the cursor, since that would open the keyboard.
+    if (touch) {
+      await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-add]").scrollIntoView({ block: "center" }));
+      await page.tap("#drawer [data-arf-swap-add]");
+    } else await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-add]").click());
     await settle(page);
+    await page.waitForTimeout(300);
+    if (touch) {
+      const typing = await page.evaluate(() => {
+        const a = document.activeElement;
+        return a && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.type !== "checkbox" ? a.tagName : "";
+      });
+      ok(label + ": Add a swap puts the cursor in no box, so no keyboard opens", !typing, typing);
+    }
     await page.evaluate(() => {
       const set = (sel, v) => {
         const ta = document.querySelector("#drawer " + sel);
@@ -16841,6 +16853,77 @@ for (const [label, viewport, touch, zoom] of [
     await settle(page);
     const said = await page.evaluate(() => [...document.querySelectorAll("#drawer [data-arf-logline]")].map((n) => n.textContent).join(" | "));
     ok(label + ": the Log says what was swapped", /swapped words in a reply, with no model call: "jolt" for "shiver"/.test(said), said.slice(0, 200));
+    // Ask before swapping: under the switch, and the swaps wait as a question.
+    await goTab(page, "Limits");
+    await settle(page);
+    ok(label + ": Ask before swapping shows under the switch while it is on", await onScreen(page, "swapAsk"), "");
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-field="swapAsk"]').click());
+    await settle(page);
+    const askOn = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings.swapAsk);
+    ok(label + ": and it is saved", askOn === true, String(askOn));
+    const question = (id) =>
+      page.evaluate((id) => {
+        window.__fromBackend({
+          type: "confirm_refine",
+          chatId: "c1",
+          messageId: id,
+          before: "Elara waved.",
+          after: "Brindle waved.",
+          held: "",
+          notes: "",
+          kind: "swap",
+          swapped: ['"Elara" for "Brindle"'],
+        });
+      }, id);
+    await question("m10");
+    await settle(page);
+    const waits = await page.evaluate(() => {
+      const c = document.querySelector("#drawer [data-arf-pending-kind]");
+      return { kind: c ? c.getAttribute("data-arf-pending-kind") : "", says: c ? c.textContent : "" };
+    });
+    ok(label + ": the swaps wait as a question in the tab, saying they are word swaps", waits.kind === "swap" && /These word swaps are made and nothing has been saved/.test(waits.says), JSON.stringify(waits).slice(0, 200));
+    await page.evaluate(() => {
+      window.__sentBefore = window.__sent.length;
+    });
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="accept"]').click());
+    await settle(page);
+    const applied = await page.evaluate(() => window.__sent.slice(window.__sentBefore).filter((m) => m.type === "apply_refine"));
+    ok(label + ": Accept it saves the swaps", applied.length === 1 && applied[0].after === "Brindle waved." && applied[0].before === "Elara waved.", JSON.stringify(applied));
+    await question("m11");
+    await settle(page);
+    await page.evaluate(() => {
+      window.__sentBefore = window.__sent.length;
+      window.__toasts = [];
+    });
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
+    await settle(page);
+    const declined = await page.evaluate(() => ({
+      applied: window.__sent.slice(window.__sentBefore).filter((m) => m.type === "apply_refine").length,
+      card: !!document.querySelector("#drawer [data-arf-pending-kind]"),
+    }));
+    ok(label + ": Turn it down saves nothing and the question goes", declined.applied === 0 && !declined.card, JSON.stringify(declined));
+    // A refine with swaps in it: one question, which says so.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "confirm_refine",
+        chatId: "c1",
+        messageId: "m12",
+        before: "A jolt hit her.",
+        after: "A shiver hit her hard.",
+        held: "",
+        notes: "",
+        kind: "refine",
+        swapped: ['"jolt" for "shiver"'],
+      });
+    });
+    await settle(page);
+    const both = await page.evaluate(() => {
+      const c = document.querySelector("#drawer [data-arf-pending-kind]");
+      return { kind: c ? c.getAttribute("data-arf-pending-kind") : "", says: c ? c.textContent : "" };
+    });
+    ok(label + ": a refine with swaps asks once and says the rewrite includes word swaps", both.kind === "refine-swaps" && /The rewrite includes word swaps\./.test(both.says), JSON.stringify(both).slice(0, 200));
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
+    await settle(page);
     ok(label + ": no errors", errors.length === 0, errors.join(" | "));
   });
 }

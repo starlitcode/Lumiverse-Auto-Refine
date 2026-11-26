@@ -9339,6 +9339,52 @@ describe("word swaps", () => {
     expect(h.sent.some((m) => m.type === "swap_trouble")).toBe(true);
   });
 
+  test("with Ask before swapping, a reply's swaps wait for a yes, and the names are kept only then", async () => {
+    const h = await run("Elara waved.", [{ find: "Elara", put: "Brindle\nMaeve", same: true }], { swapAsk: true });
+    expect(h.body("m2")).toBe("Elara waved.");
+    const asked = h.sent.filter((m) => m.type === "confirm_refine").pop();
+    expect(asked && asked.kind).toBe("swap");
+    expect(asked.swapped.length).toBe(1);
+    const name = /^(\w+) waved\.$/.exec(String(asked.after))![1];
+    const before = h.perUser["u1:swap-picks.json"];
+    expect(!before || !before.chats || !before.chats.c1).toBe(true);
+    await h.front({ type: "apply_refine", requestId: "a", chatId: "c1", messageId: "m2", before: asked.before, after: asked.after });
+    await wait(60);
+    expect(h.body("m2")).toBe(name + " waved.");
+    expect(h.perUser["u1:swap-picks.json"].chats.c1.picks.elara).toBe(name);
+    const saved = h.sent.filter((m) => m.type === "refined").pop();
+    expect(saved.kind).toBe("swap");
+  });
+
+  test("with Ask before swapping, a refine that has swaps in it asks once, even with Ask before saving off", async () => {
+    const h = await armed(["<REFINED>She stepped through, and a jolt of cold hit her.</REFINED>"], {
+      swapOn: true,
+      swapAsk: true,
+      confirmBeforeSave: false,
+      swaps: [{ find: "jolt", put: "shiver", same: true }],
+    });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+    const asked = h.sent.filter((m) => m.type === "confirm_refine");
+    expect(asked.length).toBe(1);
+    expect(asked[0].kind).toBe("refine");
+    expect(asked[0].swapped).toEqual(['"jolt" for "shiver"']);
+    expect(asked[0].after).toBe("She stepped through, and a shiver of cold hit her.");
+  });
+
+  test("with Ask before swapping, a refine with no swaps in it is saved straight away", async () => {
+    const h = await armed(["<REFINED>She stepped through, and the cold hit her.</REFINED>"], {
+      swapOn: true,
+      swapAsk: true,
+      swaps: [{ find: "jolt", put: "shiver", same: true }],
+    });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.body("m2")).toBe("She stepped through, and the cold hit her.");
+    expect(h.sent.filter((m) => m.type === "confirm_refine").length).toBe(0);
+  });
+
   test("a reroll Auto Retry adds gets its swaps", async () => {
     const h = await armed([], swapsOn([{ find: "jolt", put: "shiver", same: true }]), swapChat("A jolt ran through her."));
     await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });

@@ -5970,16 +5970,19 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     // untouched.
     // The reader's word swaps, on the rewrite only. For a selection, only the
     // part that was rewritten.
-    const sw = await swapIn(back.text, chatId, userId, confirmBeforeSave);
+    // Held back while a yes may be asked for, and kept below if none is.
+    const sw = await swapIn(back.text, chatId, userId, confirmBeforeSave || swapAsk);
+    const askFirst = confirmBeforeSave || (swapAsk && sw.swapped.length > 0);
     const whole = (pickAt
         ? split.head + split.body.slice(0, pickAt.start) + sw.text + split.body.slice(pickAt.end)
         : split.head + sw.text) + split.tail;
-    if (confirmBeforeSave) {
+    if (askFirst) {
         // The picks wait for the yes, so a rewrite turned down leaves the chat's
         // names as they were.
         heldPicks.delete(key(chatId, m.id));
         if (Object.keys(sw.picks).length)
             remember(heldPicks, key(chatId, m.id), sw.picks, HELD_PICKS_MAX);
+        remember(heldWrites, key(chatId, m.id), { kind: 'refine', swapped: sw.swapped }, HELD_PICKS_MAX);
         // The id of the reply that was refined, which is the one the yes has to
         // find. A refine of the latest reply arrives with no id and the reply is
         // found here, so the id that came in can be empty.
@@ -5992,9 +5995,13 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             // The thinking held back from the refine, so the card can leave it out.
             held: splitThinking(original).head,
             notes: notes,
+            kind: 'refine',
+            // The word swaps in the rewrite, so the question can say it has them.
+            swapped: sw.swapped.slice(0, 40),
         });
         return { ok: false, why: WHY_WAITING_YES, notes: notes };
     }
+    keepPicks(String(chatId), userId, sw.picks);
     const saved = await saveRefined(chatId, m, original, whole, userId, 'refine', undefined, sw.swapped);
     if (notes)
         saved.notes = notes;
@@ -6131,6 +6138,9 @@ async function snipMessage(chatId, messageId, picked, ahead, userId) {
 }
 let swapOn = false;
 let swapList = [];
+// Ask before swapping: a reply's swaps wait for a yes, the same way Ask
+// before saving holds a refine. A refine with swaps in it asks too.
+let swapAsk = false;
 const SWAP_RULES_MAX = 100;
 const SWAP_FINDS_MAX = 30;
 const SWAP_PUTS_MAX = 40;
@@ -6494,6 +6504,9 @@ function keepPicks(chatId, userId, made, all) {
 // once the yes comes. A no, or a newer rewrite of the same message, drops them.
 const heldPicks = new Map();
 const HELD_PICKS_MAX = 50;
+// What a write waiting for a yes is, by message, so the yes saves it as the
+// same kind: word swaps on their own, or a refine, with the swaps for the Log.
+const heldWrites = new Map();
 // The swaps on a whole message, saved as their own write, for a reply no
 // refine wrote. Only the body: the thinking at either end is left as it is.
 async function swapMessage(chatId, messageId, userId) {
@@ -6525,12 +6538,31 @@ async function swapMessage(chatId, messageId, userId) {
     const split = splitThinking(original);
     if (!split.body.trim())
         return { ok: false, why: '' };
-    const sw = await swapIn(split.body, chatId, userId);
+    const sw = await swapIn(split.body, chatId, userId, swapAsk);
     if (!sw.swapped.length)
         return { ok: false, why: '' };
     const next = split.head + sw.text + split.tail;
     if (next === original)
         return { ok: false, why: '' };
+    if (swapAsk) {
+        const k = key(chatId, m.id);
+        heldPicks.delete(k);
+        if (Object.keys(sw.picks).length)
+            remember(heldPicks, k, sw.picks, HELD_PICKS_MAX);
+        remember(heldWrites, k, { kind: 'swap', swapped: sw.swapped }, HELD_PICKS_MAX);
+        replyTo(userId, {
+            type: 'confirm_refine',
+            chatId: chatId,
+            messageId: m.id,
+            before: original,
+            after: next,
+            held: split.head,
+            notes: '',
+            kind: 'swap',
+            swapped: sw.swapped.slice(0, 40),
+        });
+        return { ok: false, why: WHY_WAITING_YES };
+    }
     return saveRefined(chatId, m, original, next, userId, 'swap', undefined, sw.swapped);
 }
 // A refine that wrote nothing still leaves the reply's swaps to do, since
@@ -7323,6 +7355,7 @@ function applyRules(s) {
     judgeAfter = s.judgeAfter === true;
     asSwipe = !!s.asSwipe;
     swapOn = s.swapOn === true;
+    swapAsk = s.swapAsk === true;
     swapList = swapRulesFrom(s.swaps);
     wornOn = !!s.wornOn;
     wornBack = Number(s.wornBack);
@@ -8111,7 +8144,9 @@ async function onPanel(payload, userId) {
                 const from = typeof payload.before === 'string'
                     ? payload.before
                     : String(m.content == null ? '' : m.content);
-                const done = await saveRefined(payload.chatId, m, from, String(payload.after || ''), userId);
+                const wrote = heldWrites.get(key(payload.chatId, payload.messageId));
+                heldWrites.delete(key(payload.chatId, payload.messageId));
+                const done = await saveRefined(payload.chatId, m, from, String(payload.after || ''), userId, wrote ? wrote.kind : 'refine', undefined, wrote ? wrote.swapped : undefined);
                 const held = heldPicks.get(key(payload.chatId, payload.messageId));
                 heldPicks.delete(key(payload.chatId, payload.messageId));
                 if (done.ok && held)
