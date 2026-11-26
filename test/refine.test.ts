@@ -9299,6 +9299,46 @@ describe("word swaps", () => {
     expect(h.body("m2")).toBe("A jolt ran through her.");
   });
 
+  test("with Ask before saving, a name is only kept for the chat once the rewrite is saved", async () => {
+    const h = await armed(["<REFINED>Elara stepped through, and the cold hit her.</REFINED>"], {
+      confirmBeforeSave: true,
+      swapOn: true,
+      swaps: [{ find: "Elara", put: "Brindle\nMaeve", same: true }],
+    });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    const asked = h.sent.filter((m) => m.type === "confirm_refine").pop();
+    expect(asked).toBeTruthy();
+    const name = /^(\w+) stepped through/.exec(String(asked.after))![1];
+    expect(["Brindle", "Maeve"]).toContain(name);
+    // Not kept while the question is open, so a no leaves the chat's names alone.
+    const before = h.perUser["u1:swap-picks.json"];
+    expect(!before || !before.chats || !before.chats.c1).toBe(true);
+    await h.front({ type: "apply_refine", requestId: "a", chatId: "c1", messageId: "m2", before: asked.before, after: asked.after });
+    await wait(60);
+    expect(h.body("m2")).toBe(asked.after);
+    expect(h.perUser["u1:swap-picks.json"].chats.c1.picks.elara).toBe(name);
+  });
+
+  test("a reply with more swaps than stand-ins keeps the rest as it is, and nothing hidden leaks into it", async () => {
+    const reply = Array(6300).fill("jolt").join(" ") + ".";
+    const h = await run(reply, [{ find: "jolt", put: "shiver", same: true }]);
+    const body = String(h.body("m2"));
+    expect(/[\uE000-\uF8FF]/.test(body)).toBe(false);
+    const words = body.replace(/\.$/, "").split(" ");
+    expect(words.length).toBe(6300);
+    expect(words.filter((w) => w === "shiver").length).toBe(0xf8ff - 0xe100 + 1);
+    expect(words.slice(-10)).toEqual(Array(10).fill("jolt"));
+    expect(h.sent.some((m) => m.type === "swap_trouble")).toBe(true);
+  });
+
+  test("a reply with more hidden parts than stand-ins gets no swaps at all", async () => {
+    const reply = Array(6300).fill("`x`").join(" ") + " A jolt hit.";
+    const h = await run(reply, [{ find: "jolt", put: "shiver", same: true }]);
+    expect(h.body("m2")).toBe(reply);
+    expect(h.sent.some((m) => m.type === "swap_trouble")).toBe(true);
+  });
+
   test("a reroll Auto Retry adds gets its swaps", async () => {
     const h = await armed([], swapsOn([{ find: "jolt", put: "shiver", same: true }]), swapChat("A jolt ran through her."));
     await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });

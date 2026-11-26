@@ -43,7 +43,7 @@ After the swaps:
 
 > Maeve leaned closer. "Tolly is gone," she said. A shiver ran through the room.
 
-- Elara and Lyra each got a name from the list, picked at random. They got different names, since there were enough to go round.
+- Elara and Lyra each got a name from the list, picked at random. They got different names, since the list had enough names for both.
 - "barely above a whisper" was taken out, along with the comma in front of it.
 - "jolt" became "shiver".
 
@@ -65,7 +65,7 @@ The same names were used, because **Keep the same pick in a chat** is on.
   - "JOLT" becomes "SHIVER".
   - A word written in small letters leaves the choice as you typed it, so a name keeps its capital.
 - A space in a phrase matches any run of spaces, or a line break.
-- A straight quote or apostrophe matches a curly one, and the other way round. "couldn't help but" finds "couldn’t help but".
+- A straight quote or apostrophe matches a curly one, and a curly one matches a straight one. "couldn't help but" finds "couldn’t help but".
 - Punctuation next to a word does not stop it, such as a comma, a period, brackets or quotation marks.
 - A longer phrase is swapped before a shorter word inside it. With swaps for "whisper" and "barely above a whisper", the phrase is swapped whole.
 - What a swap puts in is never swapped again by another swap.
@@ -85,13 +85,14 @@ A swap with nothing under **Put instead** takes the words out, and tidies what i
 - **A refine.** A refine gets the swaps in the same write, on the rewrite. A refine of part of a reply swaps only in the part that was rewritten.
 - **A refine that wrote nothing.** A reply that was not refined, such as one a check turned away, still gets its swaps, as their own write.
 - **Rerolls from Auto Retry.** A reroll is a new reply, so it gets its swaps. A reply that Auto Retry is about to retry is left alone, since it is being replaced.
+- **With Auto Foley.** With Auto Foley's **Autoplay new replies** or **Prepare replies ahead** on, a reply is spoken after its swaps. Auto Foley waits for the reply to stop changing before it directs it.
 - **Your own messages** only get swaps when **What to refine**, on the Setup tab, includes them, and only from a refine you start.
 
 Swaps are not made:
 
 - With Auto Refine off, or switched off in the chat.
 - On the greeting, unless **Refine the greeting** is on.
-- While a refine is waiting for you to say yes. The rewrite you are asked about already has its swaps.
+- While a refine is waiting for you to say yes. The rewrite you are asked about already has its swaps. A name picked for it is only kept for the chat once you accept it.
 - After **Take it out**, which takes out exactly what you selected and nothing else.
 
 ## What it leaves alone

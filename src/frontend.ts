@@ -16989,12 +16989,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   let roleById: Record<string, string> = {};
   let roleAsk = "";
   let roleSoon: any = null;
-  // Ids the latest answer did not hold. Asked about once, so a message the page
-  // shows and the chat does not have cannot keep the asking going.
-  // Each message asked about, and when. A message the answer left out is
-  // asked about again after ROLE_WAIT_MS, so one the chat had not saved yet
-  // when it was asked is not left without its buttons.
-  let roleAsked = new Map<string, number>();
+  // Each message asked about, when, and how many times. A message the answer
+  // left out is asked about again after ROLE_WAIT_MS, so one the chat had not
+  // saved yet when it was asked is not left without its buttons. After
+  // ROLE_ASKS_MAX asks it is left as it is until the chat changes or the
+  // backend says it is ready, so a message the page shows and the chat does
+  // not have cannot keep the asking going.
+  let roleAsked = new Map<string, { at: number; n: number }>();
+  const ROLE_ASKS_MAX = 3;
   // When the ask waiting on an answer went out.
   let roleSentAt = 0;
   // An ask the backend never answers, because it was sent before the backend
@@ -17016,7 +17018,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         roleGiveUp = null;
         if (roleAsk !== id) return;
         roleAsk = "";
-        roleAsked = new Map<string, number>();
+        roleAsked = new Map<string, { at: number; n: number }>();
         log("problem", "no answer about whose each message is yet, so it will be asked again");
         fillSlots();
       }, ROLE_WAIT_MS);
@@ -17024,7 +17026,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   function reaskRoles() {
     roleAsk = "";
-    roleAsked = new Map<string, number>();
+    roleAsked = new Map<string, { at: number; n: number }>();
     if (roleGiveUp) clearTimeout(roleGiveUp);
     roleGiveUp = null;
     fillSlots();
@@ -17039,14 +17041,19 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     const chat = String(msg.chatId == null ? "" : msg.chatId);
-    if (chat !== roleChat) roleAsked = new Map<string, number>();
+    // Cleared for another chat only. The first answer in this chat keeps what
+    // was asked while it was out, so the count of asks carries on.
+    if (chat !== roleChat && chat !== String(lastChatId)) roleAsked = new Map<string, { at: number; n: number }>();
     roleChat = chat;
     roleById = msg.roles && typeof msg.roles === "object" ? msg.roles : {};
     // A message first seen while this ask was out was not asked about, so
     // it is asked about now if the answer left it out.
     let missed = false;
-    roleAsked.forEach((at, id) => {
-      if (at >= roleSentAt && !roleById[id]) missed = true;
+    roleAsked.forEach((one, id) => {
+      if (one.at >= roleSentAt && !roleById[id] && one.n < ROLE_ASKS_MAX) {
+        one.n++;
+        missed = true;
+      }
     });
     if (missed) askRoles();
     fillSlots();
@@ -17070,10 +17077,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buttonFor(id: string): boolean {
     if (refinesReplies() && refinesMine()) return true;
     if (roleChat !== String(lastChatId) || !roleById[id]) {
-      const at = roleAsked.get(id);
-      const fresh = roleChat !== String(lastChatId) || at === undefined || Date.now() - at > ROLE_WAIT_MS;
-      if (fresh) {
-        roleAsked.set(id, Date.now());
+      // Counted only when a question goes out for it. Seen again while one is
+      // already out, it waits for that answer.
+      const had = roleAsked.get(id);
+      const out = !!(roleSoon || roleAsk);
+      if (!had) {
+        roleAsked.set(id, { at: Date.now(), n: 1 });
+        askRoles();
+      } else if (!out && had.n < ROLE_ASKS_MAX && (roleChat !== String(lastChatId) || Date.now() - had.at > ROLE_WAIT_MS)) {
+        had.at = Date.now();
+        had.n++;
         askRoles();
       }
       return false;

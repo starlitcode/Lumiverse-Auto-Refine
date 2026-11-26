@@ -1170,8 +1170,8 @@ function thinkShapes() {
         { needs: '</', pattern: '<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>', word: true },
         // [thinking] ... [/thinking]
         { needs: '[/', pattern: '\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]', word: true },
-        // <|think|> ... <|/think|>, and the variants that put the pipe the other
-        // way round. Builds disagree about which way it goes, so either closes
+        // <|think|> ... <|/think|>, and the variants that put the pipe on the
+        // other side. Builds disagree about which way it goes, so either closes
         // either.
         { needs: '|>', pattern: '<\\|(?:' + alt + ')\\|?>[\\s\\S]*?<\\|?\\/?(?:' + alt + ')\\|?>' },
         // Gemma 4. The pipe sits inside the opener and outside the closer, and the
@@ -2450,7 +2450,7 @@ const REFUSAL_STRONG = [
     // Fiction disclaimer. Nobody writes this inside a scene; it only appears when
     // the model is explaining that being fictional does not change its answer.
     /\beven (?:in|within) (?:a |an |the )?(?:fictional|fiction|hypothetical|imaginary|make-?believe|creative|roleplay) (?:context|setting|scenario|framing|situation)\b/i,
-    // The same disclaimer said the other way round, which is the commoner half:
+    // The same disclaimer said in the opposite order, which is the commoner half:
     // the refusal first and the fiction dismissed after it. Anchored on the word
     // fictional, because "no matter how you frame it" on its own is a line
     // somebody says in an argument.
@@ -2673,7 +2673,7 @@ function replyRefused(text) {
 // softening several times a session, and a check that cries wolf is a check
 // somebody switches off, after which it catches nothing at all.
 //
-// The narrow list misses some real softening. That is the right way round: a
+// The narrow list misses some real softening. That is the right side to err on: a
 // missed softening leaves the reader where they already were, and a false one
 // throws away a good rewrite and teaches them to distrust the whole feature.
 const STRONG = [
@@ -5970,11 +5970,16 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     // untouched.
     // The reader's word swaps, on the rewrite only. For a selection, only the
     // part that was rewritten.
-    const sw = await swapIn(back.text, chatId, userId);
+    const sw = await swapIn(back.text, chatId, userId, confirmBeforeSave);
     const whole = (pickAt
         ? split.head + split.body.slice(0, pickAt.start) + sw.text + split.body.slice(pickAt.end)
         : split.head + sw.text) + split.tail;
     if (confirmBeforeSave) {
+        // The picks wait for the yes, so a rewrite turned down leaves the chat's
+        // names as they were.
+        heldPicks.delete(key(chatId, m.id));
+        if (Object.keys(sw.picks).length)
+            remember(heldPicks, key(chatId, m.id), sw.picks, HELD_PICKS_MAX);
         // The id of the reply that was refined, which is the one the yes has to
         // find. A refine of the latest reply arrives with no id and the reply is
         // found here, so the id that came in can be empty.
@@ -6208,12 +6213,15 @@ function keepCase(found, put) {
 // Markers for the swap, all in Unicode's private area so no letter, number
 // or space in a reply can be one. A stand-in is the open mark, its number in
 // private characters, and the close mark.
-const SW_OPEN = '';
-const SW_CLOSE = '';
-const SW_GONE = '';
-const SW_GONE_CAP = '';
+const SW_OPEN = '\uE000';
+const SW_CLOSE = '\uE001';
+const SW_GONE = '\uE002';
+const SW_GONE_CAP = '\uE003';
 const swToken = (n) => SW_OPEN + String.fromCharCode(0xe100 + n) + SW_CLOSE;
-const SW_TOKEN_ANY = /([-])/g;
+const SW_TOKEN_ANY = /\uE000([\uE100-\uF8FF])\uE001/g;
+// How many stand-ins fit in that range, for the parts hidden and the words
+// put in together. Past it, the rest of the reply is left as it is.
+const SW_TOKENS_MAX = 0xf8ff - 0xe100 + 1;
 // Words taken out leave clean spacing: one space between words, none in
 // front of punctuation, none at the start or end of a line. Two commas left
 // side by side become one, and a comma left in front of a period goes. Words
@@ -6260,18 +6268,24 @@ function tidyGone(text) {
 // Parts of a reply no swap reaches: another extension's blocks, code, links,
 // tags, entities, tables and dividers. The words between two tags are still
 // swapped; the tags themselves are not.
+// full is set when the reply has more such parts than there are stand-ins,
+// and then no swap is made in it at all, since a part left showing could be
+// swapped.
 function swapMask(text) {
     const parts = [];
     let out = text;
+    let full = false;
     for (const rule of OTHERS_BLOCKS.concat(GUARDED)) {
         out = out.replace(rule, (hit) => {
-            if (parts.length >= 6000)
+            if (parts.length >= SW_TOKENS_MAX) {
+                full = true;
                 return hit;
+            }
             parts.push(hit);
             return swToken(parts.length - 1);
         });
     }
-    return { text: out, parts: parts };
+    return { text: out, parts: parts, full: full };
 }
 // Round after round, since a part can hold a stand-in put there first.
 function swapUnmask(text, parts) {
@@ -6296,9 +6310,12 @@ function swapUnmask(text, parts) {
 function swapWords(text, rules, pick) {
     const swapped = [];
     if (!rules.length || !String(text).trim())
-        return { text: text, swapped: swapped };
+        return { text: text, swapped: swapped, full: false };
     const masked = swapMask(String(text));
+    if (masked.full)
+        return { text: text, swapped: swapped, full: true };
     const parts = masked.parts;
+    let full = false;
     let out = masked.text;
     const finds = [];
     for (const rule of rules)
@@ -6311,6 +6328,11 @@ function swapWords(text, rules, pick) {
         if (!re)
             continue;
         out = out.replace(re, (whole, before, found) => {
+            // No stand-in left for what would go in: this one and the rest stay.
+            if (parts.length >= SW_TOKENS_MAX) {
+                full = true;
+                return whole;
+            }
             any = true;
             const put = keepCase(found, pick(rule, found));
             if (swapped.length < 40)
@@ -6325,9 +6347,9 @@ function swapWords(text, rules, pick) {
         });
     }
     if (!any)
-        return { text: text, swapped: swapped };
+        return { text: text, swapped: swapped, full: full };
     out = tidyGone(out);
-    return { text: swapUnmask(out, parts), swapped: swapped };
+    return { text: swapUnmask(out, parts), swapped: swapped, full: full };
 }
 // The picks made in each chat, kept on the account, so a name swapped in a
 // chat is swapped for the same name in every later reply of it.
@@ -6395,13 +6417,15 @@ async function forgetSwapPicks(userId, chatId) {
     await saveSwapPicks(userId);
 }
 // The swaps on the body of a message in one chat. The picks are read from
-// the account and saved back when a new one was made.
-async function swapIn(text, chatId, userId) {
+// the account. New ones are kept for the chat and saved, unless hold is set:
+// then they are handed back, to be kept with keepPicks once the write goes
+// ahead, such as after a yes to Ask before saving.
+async function swapIn(text, chatId, userId, hold) {
+    const made = {};
     if (!swapOn || !swapList.length)
-        return { text: text, swapped: [] };
+        return { text: text, swapped: [], picks: made };
     const all = await readSwapPicks(userId);
     const chat = String(chatId);
-    let changed = false;
     const pick = (rule, found) => {
         if (!rule.puts.length)
             return '';
@@ -6411,37 +6435,65 @@ async function swapIn(text, chatId, userId) {
         if (!rule.same)
             return random(rule.puts);
         const k = swapKey(found);
-        const here = all[chat] || { at: 0, picks: {} };
-        const had = here.picks[k];
+        const kept0 = (all[chat] && all[chat].picks) || {};
+        const had = made[k] !== undefined ? made[k] : kept0[k];
         const kept = had && rule.puts.find((p) => p.toLowerCase() === had.toLowerCase());
         if (kept)
             return kept;
         // A choice no other found word in this chat has already, while there is one.
-        const used = new Set(Object.keys(here.picks).filter((o) => o !== k).map((o) => here.picks[o].toLowerCase()));
+        const used = new Set();
+        for (const o of Object.keys(kept0))
+            if (o !== k)
+                used.add(kept0[o].toLowerCase());
+        for (const o of Object.keys(made))
+            if (o !== k)
+                used.add(made[o].toLowerCase());
         const free = rule.puts.filter((p) => !used.has(p.toLowerCase()));
         const got = random(free.length ? free : rule.puts);
-        here.picks[k] = got;
-        here.at = Date.now();
-        if (!all[chat])
-            all[chat] = here;
-        const keys = Object.keys(here.picks);
-        if (keys.length > SWAP_PICKS_PER_CHAT)
-            delete here.picks[keys[0]];
-        changed = true;
+        made[k] = got;
         return got;
     };
     const done = swapWords(text, swapList, pick);
-    if (changed) {
-        const chats = Object.keys(all);
-        if (chats.length > SWAP_PICK_CHATS_MAX) {
-            chats.sort((a, b) => all[a].at - all[b].at);
-            for (const c of chats.slice(0, chats.length - SWAP_PICK_CHATS_MAX))
-                delete all[c];
-        }
-        saveSwapPicks(userId);
+    if (done.full) {
+        const why = 'a reply has more pieces than word swaps can keep track of, so part of it was left as it is';
+        say('warn', why);
+        replyTo(userId, { type: 'swap_trouble', why: why });
     }
-    return done;
+    if (!hold)
+        keepPicks(chat, userId, made, all);
+    return { text: done.text, swapped: done.swapped, picks: made };
 }
+// New picks kept for a chat and saved to the account.
+function keepPicks(chatId, userId, made, all) {
+    const keys = Object.keys(made);
+    if (!keys.length)
+        return;
+    const store = all || swapPicks.get(userKey(userId));
+    if (!store) {
+        readSwapPicks(userId).then((loaded) => keepPicks(chatId, userId, made, loaded), () => { });
+        return;
+    }
+    const chat = String(chatId);
+    const here = store[chat] || { at: 0, picks: {} };
+    for (const k of keys)
+        here.picks[k] = made[k];
+    here.at = Date.now();
+    store[chat] = here;
+    const words = Object.keys(here.picks);
+    for (const k of words.slice(0, Math.max(0, words.length - SWAP_PICKS_PER_CHAT)))
+        delete here.picks[k];
+    const chats = Object.keys(store);
+    if (chats.length > SWAP_PICK_CHATS_MAX) {
+        chats.sort((a, b) => store[a].at - store[b].at);
+        for (const c of chats.slice(0, chats.length - SWAP_PICK_CHATS_MAX))
+            delete store[c];
+    }
+    saveSwapPicks(userId);
+}
+// Picks made for a rewrite waiting on Ask before saving, by message, kept
+// once the yes comes. A no, or a newer rewrite of the same message, drops them.
+const heldPicks = new Map();
+const HELD_PICKS_MAX = 50;
 // The swaps on a whole message, saved as their own write, for a reply no
 // refine wrote. Only the body: the thinking at either end is left as it is.
 async function swapMessage(chatId, messageId, userId) {
@@ -7417,7 +7469,7 @@ async function autoPass(p, who) {
         leave();
     await swapAfter(done, p.chatId, messageId, who);
     // Nothing reached a model, so nothing is reported as refused. The reply
-    // may well come back round: Auto Retry swipes a refusal and the next one
+    // may well come back: Auto Retry swipes a refusal and the next one
     // arrives as its own generation, with its own text, which this pass has
     // never seen and does not skip.
     if (done.stood) {
@@ -8060,6 +8112,10 @@ async function onPanel(payload, userId) {
                     ? payload.before
                     : String(m.content == null ? '' : m.content);
                 const done = await saveRefined(payload.chatId, m, from, String(payload.after || ''), userId);
+                const held = heldPicks.get(key(payload.chatId, payload.messageId));
+                heldPicks.delete(key(payload.chatId, payload.messageId));
+                if (done.ok && held)
+                    keepPicks(String(payload.chatId), userId, held);
                 replyTo(userId, { type: 'refine_result', requestId: payload.requestId, ok: done.ok, why: done.why });
             }
             catch (e) {

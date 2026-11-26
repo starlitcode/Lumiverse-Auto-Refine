@@ -158,7 +158,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 | Thinking set to high | 2 times |
 | Thinking set to extra high or max | 3 times |
 
-- A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40`, a name with no dot, or a name ending in `.local`.
+- A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40` or `10.0.0.7`, an address a VPN such as Tailscale gives out (`100.64` to `100.127`), a name with no dot, or a name ending in `.local`, `.lan`, `.home`, `.internal` or `.home.arpa`.
 - The thinking level is the one under **How much thinking**, or the connection's when **Let it think first** is set to **Whatever my connection is set to**. With thinking off, only the address counts.
 - The connection's thinking level is its **Reasoning Effort**, in Lumiverse's Reasoning settings. It counts only while **API Reasoning** is on for that connection.
 - The connection is the one each call goes to:

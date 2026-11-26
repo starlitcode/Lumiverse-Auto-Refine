@@ -16411,6 +16411,42 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
     ok("and it gets its button without a reload", out.button, JSON.stringify(out));
     ok("and selecting its text brings up the bar", out.bar, JSON.stringify(out));
   });
+  // A message the page shows and the chat never has, such as one another
+  // extension draws, is asked about at most three times. It is asked about
+  // again once the backend says it is ready.
+  await inTab(browser, { saved: { enabled: true, messageButton: true, refineSide: "replies" } }, async (page) => {
+    const out = await page.evaluate(async (html) => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const asks = () => window.__sent.filter((m) => m && m.type === "message_roles");
+      const answerLast = () => {
+        const last = asks()[asks().length - 1];
+        if (last) window.__fromBackend({ type: "message_roles", requestId: last.requestId, chatId: "c1", ok: true, roles: { "msg-mine": "user", "msg-reply": "assistant" } });
+      };
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html +
+        '<div data-message-id="msg-ghost"><p>Nobody wrote this one.</p>' +
+        '<span data-spindle-mount="message_footer" data-spindle-scope="message:msg-ghost:minimal:footer" style="display:contents"></span></div>';
+      document.body.appendChild(wrap);
+      for (let i = 0; i < 40 && !asks().length; i++) await wait(50);
+      answerLast();
+      const counts = [asks().length];
+      for (let round = 0; round < 4; round++) {
+        await wait(5300);
+        wrap.appendChild(document.createElement("i"));
+        await wait(700);
+        answerLast();
+        counts.push(asks().length);
+      }
+      const before = asks().length;
+      window.__fromBackend({ type: "backend_ready" });
+      await wait(700);
+      return { counts, ready: asks().length - before };
+    }, TWO);
+    const total = out.counts[out.counts.length - 1];
+    ok("a message the chat does not have is asked about again, but at most three times", total >= 2 && total <= 3, JSON.stringify(out));
+    ok("and asked about again once the backend says it is ready", out.ready >= 1, JSON.stringify(out));
+  });
 }
 
 // Rows that come and go with a setting, and that had their own spacing or
