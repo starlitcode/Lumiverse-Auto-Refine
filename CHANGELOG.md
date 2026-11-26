@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.57.3
+
+_2026-11-25_
+
+### Fixed
+
+- **A plain refusal did not go to the other connection.** With the built-in settings, which ask for the rewrite between tags, a refusal with no tags was read as missing tags, so **If it refuses, try another connection** never asked the other connection. A refusal is now read as a refusal first.
+- **The status line kept saying Other connection.** After the other connection answered, later passes and replies on the refine connection were still marked as the other connection. It now goes once the other connection has answered.
+- **The panel could wait forever.** While the backend kept saying a refine was still working, the panel never gave up, even past an hour, so a call that never came back left the panel busy. It now gives up an hour after the reply started, as it did before.
+- **A deleted other connection was not named.** When the connection under **Which other connection** was no longer on your account, the refine failed with Lumiverse's own words. The Log now says that connection is gone and to pick another.
+- **A button tapped on a phone stayed lit.** A phone keeps the hover color on the last thing tapped. Hover colors are now only used with a mouse.
+- **The hint for Chats you switched off, in export, was out of date.** It said to tick it to move between browsers. Your account already keeps the list for every device, so it now says the part is for a backup.
+
+---
+
 ## 1.57.2
 
 _2026-11-25_

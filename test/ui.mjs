@@ -5289,6 +5289,30 @@ console.log("\nthe Stop button stays put through a run through the chat");
   }
 }
 
+console.log("\nno hover color is left on a button tapped on a phone");
+{
+  // A real phone keeps :hover on the last thing tapped, which the test
+  // browser does not copy. So the rules are read: every hover color of Auto
+  // Refine's sits inside @media (hover: hover), where a phone never uses it.
+  // The rules that turn motion off name :hover only to match, and are left out.
+  await inTab(browser, { viewport: { width: 390, height: 900 }, touch: true, saved: { enabled: true } }, async (page) => {
+    const loose = await page.evaluate(() => {
+      const out = [];
+      const walk = (rules, inHover) => {
+        for (const r of rules) {
+          if (r.cssRules && r.media) walk(r.cssRules, inHover || /hover:\s*hover/.test(r.media.mediaText));
+          else if (r.selectorText && /:hover/.test(r.selectorText) && /\.arf-/.test(r.selectorText) && !/::-webkit-search|data-arf-still/.test(r.selectorText) && !inHover) out.push(r.selectorText);
+        }
+      };
+      for (const sh of document.styleSheets) {
+        try { walk(sh.cssRules, false); } catch (_) {}
+      }
+      return out;
+    });
+    ok("every hover color is only for a device that hovers", !loose.length, loose.slice(0, 4).join(" | "));
+  });
+}
+
 console.log("\na refine the backend says is still working is not given up on");
 {
   // The backend says a refine is still waiting or working every 10 seconds.
@@ -5338,6 +5362,41 @@ console.log("\na refine the backend says is still working is not given up on");
       await page.waitForTimeout(1200);
       const gone = await state();
       ok(label + ": once the backend goes quiet, the panel gives up as before", !gone.busy && /never came back/.test(gone.toasts), JSON.stringify(gone));
+    });
+    // With the wait switched off, a backend that keeps saying it is working
+    // is still given up on an hour after the reply started.
+    await inTab(browser, { viewport, touch, saved: { enabled: true, timeoutSecs: 0 } }, async (page) => {
+      await goTab(page, "Log");
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      const ahead = (secs) =>
+        page.evaluate((secs) => {
+          window.__ahead = (window.__ahead || 0) + secs * 1000;
+          if (!window.__realNow) {
+            window.__realNow = Date.now.bind(Date);
+            Date.now = () => window.__realNow() + window.__ahead;
+          }
+        }, secs);
+      const busy = () => page.evaluate(() => /Refining|Thinking|Writing|Checking/.test(document.querySelector("#drawer").textContent));
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll("#drawer button"))
+          .find((b) => /Refine the latest reply/.test(b.textContent))
+          .click();
+        const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+        window.__fromBackend({ type: "refine_ack", requestId: id });
+        window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      });
+      await ahead(3500);
+      await page.evaluate(() => window.__fromBackend({ type: "refine_working" }));
+      await page.waitForTimeout(600);
+      ok(label + ": just under an hour in, still working, the panel still waits", await busy());
+      await ahead(250);
+      await page.evaluate(() => window.__fromBackend({ type: "refine_working" }));
+      await page.waitForTimeout(1500);
+      ok(label + ": past an hour, the panel gives up even though the backend says it is still working", !(await busy()));
     });
   }
 }

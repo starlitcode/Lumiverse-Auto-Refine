@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.57.2";
+const VERSION = "1.57.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -351,9 +351,8 @@ function selectBox(sel, sizing = "") {
 }
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
 // Where the floating button was left. Kept in the browser rather than in the
-// settings, for the same reason the list of switched-off chats is: a position is
-// a property of the screen you are sitting at, not of your account, and it does
-// not belong in an export somebody might share.
+// settings: a position belongs to the screen you are using, not to your
+// account, and it does not belong in an export somebody might share.
 const LAYOUT_KEY = "lv-auto-refine:layout:v1";
 const PRESETS_KEY = "lv-auto-refine:presets:v1";
 const SETUPS_KEY = "lv-auto-refine:setups:v1";
@@ -4750,12 +4749,11 @@ export function setup(ctx, overrides) {
     // these rather than from now, so re-arming moves it no further out than the
     // waiting actually justifies.
     //
-    // Re-arming from now was the hole. Every provider wait and every message of a
-    // run through the chat pushed the deadline a full wait into the future, so a
-    // refine told to give up after a quarter of an hour could sit there for
-    // three times that and the panel would keep saying it was thinking. The
-    // setting says give up after this long, and it has to mean since the run
-    // started.
+    // The deadline is counted from when the run started, not from each new
+    // event, so a provider wait or a message of a run through the chat cannot
+    // push it a full wait further out each time. A refine told to give up after
+    // a quarter of an hour gives up then. Only the backend saying it is still
+    // working moves it, up to an hour from the start.
     let deadFrom = 0;
     let deadAllow = 0;
     // The same deadline as a time on the clock. A phone pauses the timers of a
@@ -4776,9 +4774,25 @@ export function setup(ctx, overrides) {
     // the run is alive, so the wait is per reply there, and holding forty replies
     // to one reply's wait would cut short a run that is working perfectly well.
     // A provider wait inside one refine is the opposite case and is not fresh.
-    function armDeadman(allowMs, fresh) {
+    //
+    // `beat` is the backend saying it is still working. The wait then counts
+    // from that moment, so a slow model is not given up on while the backend
+    // is still there. It never goes past an hour from the start of the reply,
+    // so a call that never comes back still ends.
+    function armDeadman(allowMs, fresh, beat) {
         if (deadman)
             clearTimeout(deadman);
+        if (beat && deadFrom) {
+            const cap = waitCap();
+            const quiet = cap ? Math.max(20, cap + 15) + deadAllow : BACKSTOP_S;
+            deadAt = Math.min(Date.now() + quiet * 1000, deadFrom + BACKSTOP_S * 1000);
+            deadWhy =
+                deadAt === deadFrom + BACKSTOP_S * 1000
+                    ? "the backend was still working after an hour, so this is the backstop"
+                    : "the backend stopped saying it was still working";
+            deadman = setTimeout(giveUpWaiting, Math.max(1000, deadAt - Date.now()));
+            return;
+        }
         if (fresh) {
             deadFrom = 0;
             deadAllow = 0;
@@ -5544,7 +5558,9 @@ export function setup(ctx, overrides) {
         "background:var(--lumiverse-secondary,rgba(128,128,128,.15));" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
-        ".arf-btn:hover:not(:disabled){background:var(--lumiverse-secondary-hover,rgba(128,128,128,.25))}" +
+        // A phone keeps the hover color on the last thing tapped, so it stays lit
+        // after the tap. Each hover color is only for a device that hovers.
+        "@media (hover: hover){.arf-btn:hover:not(:disabled){background:var(--lumiverse-secondary-hover,rgba(128,128,128,.25))}}" +
         // Filled with the accent at a tint, edged with it, and lettered in the
         // theme's own accent text color, which is the one token a theme defines
         // for exactly this: accent-colored words on the panel's own background.
@@ -5560,8 +5576,8 @@ export function setup(ctx, overrides) {
         ".arf-btn.arf-primary{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
         "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
         "color:var(--lumiverse-primary-text,rgba(186,135,255,.95));font-weight:600}" +
-        ".arf-btn.arf-primary:hover:not(:disabled){" +
-        "background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        "@media (hover: hover){.arf-btn.arf-primary:hover:not(:disabled){" +
+        "background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}" +
         ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
         ".arf-btn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
         ".arf-box{-webkit-appearance:none;appearance:none;margin:0;flex:none;position:relative;" +
@@ -5700,7 +5716,7 @@ export function setup(ctx, overrides) {
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "font:12.5px var(--lumiverse-font-family,system-ui);" +
         "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
-        ".arf-fold:hover{background:var(--lumiverse-secondary,rgba(128,128,128,.15))}" +
+        "@media (hover: hover){.arf-fold:hover{background:var(--lumiverse-secondary,rgba(128,128,128,.15))}}" +
         ".arf-fold:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
         ".arf-caret{flex:none;font-size:9px;width:9px;" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -5796,8 +5812,8 @@ export function setup(ctx, overrides) {
         // The smallest phones leave the row a few pixels short of every label, so
         // the space either side of a label shrinks there instead of the label.
         "@media (max-width: 340px){.arf-tabs{gap:1px}.arf-tab{padding-left:1px;padding-right:1px}}" +
-        ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-        "background:var(--lumiverse-primary-010,rgba(147,112,219,.1))}" +
+        "@media (hover: hover){.arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "background:var(--lumiverse-primary-010,rgba(147,112,219,.1))}}" +
         // Filled, and the text at full strength. Two marks rather than one, because
         // a fill alone is lost on a theme that washes it out and color alone is
         // lost on one that flattens it.
@@ -5898,7 +5914,7 @@ export function setup(ctx, overrides) {
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))}" +
-        ".arf-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        "@media (hover: hover){.arf-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}}" +
         // Nothing here to refine. The ink goes quiet and the edge with it, rather
         // than the whole button dropping to half opacity: dimming the lot dims the
         // mark as well, so the one part that says which extension this is goes with
@@ -5991,9 +6007,12 @@ export function setup(ctx, overrides) {
         // correct.
         "font-family:inherit;" +
         "transition:border-color var(--lumiverse-transition-fast,150ms ease)}" +
-        '.arf-q:hover,.arf-q[aria-expanded="true"]{' +
+        '.arf-q[aria-expanded="true"]{' +
         "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
         "color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
+        "@media (hover: hover){.arf-q:hover{" +
+        "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
+        "color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}}" +
         // A finger needs a bigger target than a cursor does, and this is the
         // smallest control on the panel.
         "@media (pointer: coarse){.arf-q{width:32px;height:32px;font-size:14px}}" +
@@ -6087,7 +6106,7 @@ export function setup(ctx, overrides) {
         ".arf-x{-webkit-appearance:none;appearance:none;background:none;border:0;padding:2px 6px;" +
         "font-size:18px;line-height:1;cursor:pointer;border-radius:var(--lumiverse-radius-sm,5px);" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
-        ".arf-x:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        "@media (hover: hover){.arf-x:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}}" +
         ".arf-x:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
         // The fold on a block. Its own class, not the panel's fold caret: that one
         // is 9px inside a heading, and this one is a button beside a tick box.
@@ -6276,8 +6295,8 @@ export function setup(ctx, overrides) {
         ".arf-btn.arf-danger{border-color:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 45%,transparent);" +
         "color:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 70%,var(--lumiverse-text,#eee));" +
         "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 12%,transparent)}" +
-        ".arf-btn.arf-danger:hover:not(:disabled){" +
-        "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 22%,transparent)}" +
+        "@media (hover: hover){.arf-btn.arf-danger:hover:not(:disabled){" +
+        "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 22%,transparent)}}" +
         // ---- anything that is a log, a count or a piece of a prompt ----
         // The host's own monospace, so a timestamp column lines up, a character
         // count reads as a number, and the text of a prompt looks like the thing
@@ -6316,7 +6335,7 @@ export function setup(ctx, overrides) {
         "line-height:0;cursor:pointer;-webkit-tap-highlight-color:transparent;" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.62));" +
         "transition:color .15s ease,opacity .15s ease}" +
-        ".arf-slot:hover{color:var(--lumiverse-text,rgba(255,255,255,.92))}" +
+        "@media (hover: hover){.arf-slot:hover{color:var(--lumiverse-text,rgba(255,255,255,.92))}}" +
         ".arf-slot:focus-visible{outline:2px solid var(--lumiverse-primary,#8b5cf6);" +
         "outline-offset:2px}" +
         ".arf-slot svg{display:block;width:14px;height:14px}" +
@@ -13802,7 +13821,7 @@ export function setup(ctx, overrides) {
             {
                 id: PART_CHATS,
                 label: "Chats you switched off",
-                what: "A list of chat ids. They name chats that will not exist on another machine, so this is off unless you are moving between browsers on the same account.",
+                what: "A list of chat ids. Your account already keeps them for every device, so this is for a backup. The ids name chats that will not exist on another account.",
             },
         ]);
     }
@@ -14185,8 +14204,9 @@ export function setup(ctx, overrides) {
         return took;
     }
     // Whether the connection a setting is pointed at, Refine using or the other
-    // connection asked after a refusal, is one the account still has. Not asked before the list has arrived, since not knowing yet and
-    // knowing it is gone are different things to say.
+    // connection asked after a refusal, is one the account still has. Not asked
+    // before the list has arrived, since not knowing yet and knowing it is gone
+    // are different things to say.
     function lostConnection(key = "connectionId") {
         const id = String(cfg[key] || "");
         if (!id || !connections.length)
@@ -17637,25 +17657,30 @@ export function setup(ctx, overrides) {
                             : "what " + whoName() + " found went to the refine model: " + checks, true);
                         return;
                     }
-                    // A second refine after the second model read the rewrite, turned
-                    // down by a check. The first rewrite is what gets saved, and the Log
-                    // says why.
-                    // The refine connection refused, sent nothing or was cut off, and
-                    // the other connection is being asked.
                     // The backend is still waiting or working on a refine. The panel's
                     // give-up timer starts again, so it only gives up on a backend that
                     // has gone quiet.
                     if (msg.type === "refine_working") {
                         if (busy)
-                            armDeadman(0, true);
+                            armDeadman(0, false, true);
                         return;
                     }
+                    // The refine connection refused, sent nothing or was cut off, and
+                    // the other connection is being asked. Done says it has answered.
                     if (msg.type === "refine_backup") {
+                        if (msg.done) {
+                            onBackup = false;
+                            tickLive();
+                            return;
+                        }
                         onBackup = true;
                         log("refine", "the answer failed (" + String(msg.why || "no reason given") + "), so the other connection was asked");
                         tickLive();
                         return;
                     }
+                    // A second refine after the second model read the rewrite, turned
+                    // down by a check. The first rewrite is what gets saved, and the Log
+                    // says why.
                     if (msg.type === "refine_again_dropped") {
                         log("recheck", "the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
                         return;

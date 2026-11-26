@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.57.2';
+const VERSION = '1.57.3';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -3369,6 +3369,13 @@ function judge(answer: any, original: string, tags: boolean = true): Verdict {
   const got = unwrapOutput(String(answer == null ? '' : answer));
   if (wrapOutput && got.tagged && !got.text)
     return { ok: false, text: '', why: 'the rewrite was cut off before it finished', notes: got.outside };
+  // A refusal comes with no tags, since the model wrote no rewrite. It is
+  // named as a refusal before the tags are asked for, so it can go to the
+  // other connection, which looks for that reason.
+  if (guardRefusal && !got.tagged) {
+    const bare = unwrapQuotes(unfence(stripControlTokens(stripThinkingFrom(String(answer == null ? '' : answer))))).trim();
+    if (bare && bare.length < 600 && looksLikeRefusal(bare)) return { ok: false, text: '', why: 'the model declined to rewrite it' };
+  }
   if (tags && wrapOutput && requireTags && !got.tagged && promptAsksForTags() && String(answer == null ? '' : answer).trim())
     return {
       ok: false,
@@ -4244,6 +4251,15 @@ async function modelOf(connId: string, userId?: string): Promise<string> {
     connModels.set(key, got);
   }
   return got.map[connId] || '';
+}
+
+// Whether the account still has a connection. Null when the list could not be
+// read, since not knowing is not the same as knowing it is gone.
+async function connectionKnown(connId: string, userId?: string): Promise<boolean | null> {
+  await modelOf(connId, userId);
+  const got = connModels.get(String(userId || ''));
+  if (!got || !Object.keys(got.map).length) return null;
+  return Object.prototype.hasOwnProperty.call(got.map, connId);
 }
 
 // The host's own tokenizer when it will answer, and the usual estimate when it
@@ -5673,6 +5689,17 @@ async function refineRun(
       say('info', 'the other connection is the one that refines, so it was not asked');
       return got;
     }
+    // A connection picked and since deleted is said plainly, rather than
+    // left to fail with the host's own words.
+    if (backupConnection && (await connectionKnown(backupConnection, userId)) === false) {
+      say('warn', 'the other connection picked is no longer on your account, so it was not asked. Pick another under Which other connection');
+      return {
+        ok: false,
+        out: Object.assign({}, got.out, {
+          why: got.out.why + '. The other connection picked is no longer on your account, so it was not asked',
+        }),
+      };
+    }
     say('info', 'asking the other connection after: ' + got.out.why);
     tell(userId, { type: 'refine_backup', chatId: chatId, messageId: m.id, why: String(got.out.why || '') });
     // The pass's own thinking, wait and samplers go with it. The prices are
@@ -5694,6 +5721,9 @@ async function refineRun(
     waits = 0;
     verdict = { ok: false, text: '', why: 'nothing was tried' };
     const again = await walkWith(pass, input, other);
+    // The status line stops saying Other connection once it has answered,
+    // so a later pass or reply on the refine connection is not marked.
+    tell(userId, { type: 'refine_backup', chatId: chatId, messageId: m.id, done: true });
     if (again.ok) {
       say('info', 'the other connection wrote the rewrite');
       return again;

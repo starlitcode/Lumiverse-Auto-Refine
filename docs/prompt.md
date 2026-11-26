@@ -658,7 +658,7 @@ The **Model setups** card on the Model tab works the same way.
 - **Import from files** reads them back. You can pick several files at once. They are applied together, and if two files name the same preset or setting, the last one picked wins.
 - If a file cannot be read, nothing is taken from any of them, and the panel says which file failed.
 - Importing replaces what you have, so export first if you want a way back.
-- **Chats you switched off** starts unticked, because chat ids mean nothing on another account. Tick it only to move between browsers on the same account.
+- **Chats you switched off** starts unticked, because chat ids mean nothing on another account. Your account already keeps the list for every device, so tick it only for a backup.
 
 **Presets and model setups are matched by name.** A file with a name you already have replaces that one, instead of adding a copy. A preset that matches yours exactly is left alone, so importing the same file twice changes nothing. The panel says how many came in, how many replaced one you had, and how many were already there.
 

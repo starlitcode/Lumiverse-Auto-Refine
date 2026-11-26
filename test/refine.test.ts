@@ -321,6 +321,9 @@ function host(
       list: async () => [
         { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
         { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
+        // The two the tests of the other connection name.
+        { id: "conn-first", name: "First", provider: "openai", model: "mini", is_default: false },
+        { id: "conn-other", name: "Other", provider: "openai", model: "mini", is_default: false },
         ...((opts as any).bound || []).map((b: any, i: number) => ({
           id: "c-bound-" + i,
           name: "Bound " + i,
@@ -2077,7 +2080,7 @@ describe("what the pass costs", () => {
     await h.front({ type: "list_connections", requestId: "r" });
     await wait(50);
     const got = h.sent.find((m) => m.type === "connections");
-    expect(got.list.map((c: any) => c.name)).toEqual(["Cheap and quick", "The good one"]);
+    expect(got.list.map((c: any) => c.name)).toEqual(["Cheap and quick", "The good one", "First", "Other"]);
     expect(got.list[1].isDefault).toBe(true);
   });
 });
@@ -5282,6 +5285,14 @@ describe("trying another connection after a refusal", () => {
   const refusal = "I'm sorry, but I can't help with that.";
   const clean = "<REFINED>She stepped through and the cold hit her.</REFINED>";
 
+  test("one picked and since deleted is not asked, and the Log says why", async () => {
+    const h = await armed([refusal, clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-gone" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+    expect(JSON.stringify(h.sent)).toMatch(/no longer on your account/);
+  });
+
   test("off by default, so a refusal is one call", async () => {
     const h = await armed([refusal, clean], { backupConnection: "conn-other" });
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -5297,6 +5308,20 @@ describe("trying another connection after a refusal", () => {
     expect(h.asked.map((a: any) => a.connection_id)).toEqual(["conn-first", "conn-other"]);
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
     expect(h.sent.some((m: any) => m.type === "refine_backup" && /declined to rewrite/.test(m.why))).toBe(true);
+    // Once it has answered, the panel is told, so its status line stops
+    // naming the other connection.
+    const order = h.sent.filter((m: any) => m.type === "refine_backup").map((m: any) => (m.done ? "done" : "asked"));
+    expect(order).toEqual(["asked", "done"]);
+  });
+
+  // The default settings ask for the rewrite between tags. A refusal has
+  // none, and still has to be read as a refusal, not as missing tags.
+  test("with the tags asked for, as by default, a refusal still goes to the other connection", async () => {
+    const h = await armed([refusal, clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-other", requireTags: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.map((a: any) => a.connection_id)).toEqual(["conn-first", "conn-other"]);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
   test("an empty answer and a content filter error are asked again there too", async () => {
