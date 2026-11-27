@@ -155,6 +155,8 @@ After the swaps:
 
 ## When swaps are made
 
+Word swaps are the last step before a reply is saved. See [What happens to a new reply](settings.md#what-happens-to-a-new-reply) for the whole order.
+
 - **A new reply.** Swaps are made on each new reply, whether or not the automatic refine is on.
 - **A refine.** A refine gets the swaps in the same write, on the rewrite. A refine of part of a reply swaps only in the part that was rewritten.
 - **A refine that wrote nothing.** A reply that was not refined, such as one a check turned away, still gets its swaps, as their own write.

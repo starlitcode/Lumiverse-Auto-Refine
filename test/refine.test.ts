@@ -9400,6 +9400,47 @@ describe("word swaps", () => {
   });
 });
 
+// The order on a new reply, as docs/settings.md tells it: the refine, then
+// Cut filler on the rewrite, then the word swaps, all in one write.
+describe("the order on a new reply", () => {
+  test("the example on the docs page", async () => {
+    const reply = "Mara opened the gate and the hinges groaned. Her breath caught. She stepped into the yard, jaw tight.";
+    const rewrite = "Mara pushed the gate open, and the hinges groaned. Her breath caught. She crossed into the yard, jaw tight.";
+    const msgs: Msg[] = [
+      { id: "m0", role: "assistant", content: "The farm is dark tonight." },
+      { id: "m1", role: "user", content: "i go to the yard" },
+      { id: "m2", role: "assistant", content: reply },
+    ];
+    const asked: string[] = [];
+    const jev = (_u: string, init: any) => {
+      const body = JSON.parse(init.body);
+      asked.push(body.state.reply);
+      const answers: Record<string, any> = {};
+      for (const id of Object.keys(body.questions))
+        answers[id] = { type: "noul", noul: /Her breath caught/.test(body.questions[id].instructions) ? 0.95 : 0.1 };
+      return { status: 200, body: JSON.stringify({ answers }) };
+    };
+    const h = await armed(
+      ["<refined>" + rewrite + "</refined>"],
+      { fillerOn: true, swapOn: true, swaps: [{ find: "jaw tight", put: "", same: true, cut: "end" }] },
+      msgs,
+      { jev: jev },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-order" });
+    await wait(120);
+    // Cut filler read the rewrite, not the reply as it came in.
+    expect(asked).toEqual([rewrite]);
+    expect(h.body("m2")).toBe("Mara pushed the gate open, and the hinges groaned. She crossed into the yard.");
+    expect(h.writes.filter((w: any) => w.id === "m2").length).toBe(1);
+    const said = h.sent.filter((m: any) => m.type === "refined").pop();
+    expect(said.kind).toBe("refine");
+    expect(said.swapped).toEqual(['"Her breath caught." cut as filler, 95% sure', '", jaw tight" for nothing']);
+    await h.front({ type: "undo_refine", requestId: "u", chatId: "c1", messageId: "m2" });
+    await wait(40);
+    expect(h.body("m2")).toBe(reply);
+  });
+});
+
 // Cut filler: the Decision model is asked about each sentence of a new reply
 // in one call, and the sentences it is sure enough are filler are taken out.
 describe("Cut filler", () => {

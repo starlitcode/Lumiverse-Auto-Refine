@@ -71,6 +71,53 @@ Below them:
 
 The greeting is not refined unless **Refine the greeting** is on. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
 
+## What happens to a new reply
+
+### In short
+
+- Auto Retry goes first. A reply it is about to retry is left alone.
+- With the automatic refine on, the reply is rewritten first, with the prompt from the preset that is loaded.
+- Then **Cut filler** reads the rewrite, and then **Word swaps** run on it.
+- With no refine, **Cut filler** and **Word swaps** still run, on the reply as it came in.
+- Everything is saved in one write, so one **Put it back** undoes all of it.
+- A preset only sets the prompt. It never turns **Cut filler** or **Word swaps** on or off, and never changes their settings.
+
+### The steps
+
+1. **Auto Retry.** If Auto Retry is going to retry the reply, Auto Refine leaves it, since a new reply is on the way. If Auto Retry is still judging the reply, Auto Refine waits for its answer.
+2. **Two models.** With **How many models** set to two, the Decision model reads the reply and says whether it needs a refine. See [Two models](two-models.md).
+3. **The refine.** With **Refine every new reply automatically** on, and a refine needed, the refine model rewrites the reply. It uses the prompt on the Prompt tab, which is the preset you loaded last.
+4. **The checks.** [What it refuses to save](guardrails.md) looks at the rewrite. A rewrite that fails a check is dropped, and the reply is kept as it came in.
+5. **Cut filler.** With **Cut filler from each reply** on, the Decision model reads the rewrite, or the reply if there is no rewrite, and its sure filler sentences are taken out. See [Cut filler](filler.md).
+6. **Word swaps.** With **Swap words in each reply** on, the swaps run on what is left. See [Word swaps](swaps.md).
+7. **Asking first.** With **Ask before saving a refine**, **Ask before cutting** or **Ask before swapping** on, the result waits for your yes. A rewrite with cuts or swaps in it asks once for all of it.
+8. **The write.** The result is saved over the reply in one write. **Put it back** brings back the reply as it came in.
+
+### An example
+
+Theo has the automatic refine on, **Cut filler** on, and one word swap: **jaw tight**, with **What to take out** set to **The end of the sentence**. A reply comes in:
+
+> Mara opened the gate and the hinges groaned. Her breath caught. She stepped into the yard, jaw tight.
+
+1. The refine model rewrites it:
+   > Mara pushed the gate open, and the hinges groaned. Her breath caught. She crossed into the yard, jaw tight.
+2. The rewrite passes every check.
+3. Cut filler sends the rewrite to the Decision model. It is 95% sure "Her breath caught." is filler, so that sentence goes.
+4. The word swap takes out ", jaw tight".
+5. It is saved in one write:
+   > Mara pushed the gate open, and the hinges groaned. She crossed into the yard.
+6. The Log lists the refine, the cut and the swap. **Put it back** brings back the reply as it first came in.
+
+### Which costs what
+
+| Step | Model call |
+| --- | --- |
+| Two models | One Decision call |
+| The refine | One call to the refine model, or more with several passes or rewrites at once |
+| The checks | None |
+| Cut filler | One Decision call |
+| Word swaps | None |
+
 ## Every way to refine
 
 Each row is one thing you can refine, and every place its button is.

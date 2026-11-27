@@ -87,6 +87,8 @@ All of these are under **Cut filler from each reply**, and show only while it is
 
 ## When it runs
 
+Cut filler runs after the refine and before the word swaps. See [What happens to a new reply](settings.md#what-happens-to-a-new-reply) for the whole order.
+
 - **A new reply**, whether or not the automatic refine is on.
 - **A refine of a whole reply.** The cuts are made on the rewrite, in the same write.
 - Not on **a refine of part of a reply**, since a part has too little around it to judge.
