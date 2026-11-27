@@ -143,6 +143,21 @@ Two skills are available. Load them before starting work.
 - The model is named in the panel and the Log by the connection's model id,
   with the maker taken off, such as `jev-latest`.
 
+## Word swaps and Cut filler
+
+- Word swaps call no model. They are matched in code, on the server.
+- Cut filler asks the Decision connection in `judgeConnection`, the same one
+  two models use, with one `noul` question for each sentence in one call.
+  **Which Decision connection** shows while either one is on.
+- Cut filler's question is in the panel, **What it asks about each
+  sentence**, with `{{sentence}}` where each sentence goes, and **Use the
+  built-in text** to go back. Nothing else is sent with it but the reply.
+- A whole sentence is never taken out when it holds dialogue, code, a link
+  or a tag. A reply is never emptied.
+- **Most of a reply a cut may take out** counts only the sentence and
+  end-of-sentence cuts, so word swaps that take out a few words work as they
+  did before it.
+
 ## Thinking formats
 
 - Both extensions recognize the same thinking formats. A new one goes into both,
