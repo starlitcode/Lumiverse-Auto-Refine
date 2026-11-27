@@ -22,6 +22,9 @@ _2026-11-26_
 
 ### Fixed
 
+- **Replies you can put back are no longer lost when your account cannot be read.** With **Keep them through an update** on, a failed read of the saved list left it looking empty, and the next refine saved over it. Now nothing is saved over a list that could not be read, a notification says so, and it is read again next time. The same goes for the names your word swaps picked.
+- **Settings that cannot be read from your account are not overwritten.** A failed read was taken as nothing saved, and this browser's copy was written over the account's, which could undo changes made on another device. Now the panel keeps this browser's copy, writes nothing to the account, says "Your settings could not be read from your account. They are kept in this browser only for now.", and asks again in 10 seconds. Presets, model setups and the chats switched off work the same way.
+- **Test on the Decision connection counts and gives up.** It now counts the seconds while it waits, cannot be pressed again until it has an answer, and gives up after 60 seconds, saying so.
 - **Selecting text in a new reply works without a reload.** With **What to refine** set to one side, a reply that arrived while Auto Refine was asking whose each message is could be left out of the answer. That reply then had no button, and selecting its text brought up no bar, until Lumiverse was reloaded. It is now asked about again.
 - **A false warning that the run through the chat stopped answering.** During **Refine every reply here**, the panel warned that the run had stopped answering when one reply took longer than the wait and 30 seconds, such as during a wait for a busy provider, with two models, or on a long refine. The backend was still working. The panel now waits while the backend says it is still working. It warns when the backend goes quiet, or when one reply has run for over an hour.
 

@@ -16960,6 +16960,87 @@ for (const [label, viewport, touch] of [["phone", { width: 390, height: 860 }, t
   });
 }
 
+// A read of the account that fails is not the same as nothing saved there.
+// The panel keeps this browser's copy, writes nothing to the account, says so
+// once, and asks again in 10 seconds.
+console.log("\na settings read that fails keeps this browser's copy");
+await inTab(browser, { saved: { enabled: true } }, async (page, errors) => {
+  const lastSave = () => page.evaluate(() => {
+    const s = window.__sent.filter((m) => m.type === "set_settings").pop();
+    return s ? { keep: !!s.keep } : null;
+  });
+  const flip = async () => {
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-field="swapOn"]').click());
+    await settle(page);
+  };
+  const asked = await page.evaluate(async () => {
+    window.__toasts = [];
+    const ask = window.__sent.filter((m) => m.type === "load_settings").pop();
+    window.__fromBackend({ type: "loaded_settings", requestId: ask.requestId, settings: null, failed: true });
+    await new Promise((r) => setTimeout(r, 80));
+    return window.__sent.filter((m) => m.type === "load_settings").length;
+  });
+  const told = await page.evaluate(() => (window.__toasts || []).slice());
+  ok("a failed read says so once, in plain words",
+    told.filter((t) => t === "Your settings could not be read from your account. They are kept in this browser only for now.").length === 1, JSON.stringify(told));
+  await goTab(page, "Limits");
+  await flip();
+  const held = await lastSave();
+  ok("a change is kept in this browser and not written to the account", !!held && held.keep === true, JSON.stringify(held));
+  await page.waitForTimeout(10600);
+  const again = await page.evaluate(() => window.__sent.filter((m) => m.type === "load_settings").length);
+  ok("it is asked for again after 10 seconds", again === asked + 1, asked + " then " + again);
+  await page.evaluate(async () => {
+    const ask = window.__sent.filter((m) => m.type === "load_settings").pop();
+    window.__fromBackend({ type: "loaded_settings", requestId: ask.requestId, settings: null, failed: false });
+    await new Promise((r) => setTimeout(r, 80));
+  });
+  await flip();
+  const written = await lastSave();
+  ok("once it is read, a change is written to the account again", !!written && written.keep === false, JSON.stringify(written));
+  ok("no errors", errors.length === 0, errors.join(" | "));
+});
+
+// Test on the Decision connection counts the seconds while it waits, cannot
+// be pressed twice, and gives up after 60 seconds.
+console.log("\nthe Decision connection test counts and gives up");
+for (const [label, viewport, touch, full] of [["laptop", { width: 1280, height: 900 }, false, true], ["phone", { width: 390, height: 860 }, true, false]]) {
+  await inTab(browser, { viewport, touch, saved: { judgeMode: "two" } }, async (page, errors) => {
+    await goTab(page, "Model");
+    await page.evaluate(async () => {
+      window.__fromBackend({
+        type: "decision_connections",
+        requestId: "x",
+        state: "ok",
+        list: [{ id: "dc-1", name: "Quick checks", provider: "openrouter", model: "~typesafe/jev-latest", isDefault: true, hasKey: true }],
+      });
+      await new Promise((r) => setTimeout(r, 60));
+    });
+    await settle(page);
+    const read = () => page.evaluate(() => ({
+      said: (document.querySelector("#drawer [data-arf-jevsaid]") || {}).textContent || "",
+      off: !!(document.querySelector('#drawer [data-arf-jev="test"]') || {}).disabled,
+      asks: window.__sent.filter((m) => m.type === "jev_test").length,
+    }));
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-jev="test"]').click());
+    await settle(page);
+    const start = await read();
+    ok(label + ": while it waits, the button is off", start.off && start.asks === 1, JSON.stringify(start));
+    await page.waitForTimeout(2300);
+    const later = await read();
+    ok(label + ": and the seconds are counted", /one small question\. [2-3] s$/.test(later.said), later.said);
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-jev="test"]').click());
+    await settle(page);
+    ok(label + ": pressing it again asks nothing more", (await read()).asks === 1, "");
+    if (full) {
+      await page.waitForTimeout(58500);
+      const gave = await read();
+      ok(label + ": after 60 seconds it gives up and says so", /did not answer in 60 s\.$/.test(gave.said) && !gave.off, JSON.stringify(gave));
+    }
+    ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

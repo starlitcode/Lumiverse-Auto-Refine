@@ -460,6 +460,13 @@ function host(
     // account's key is the whole point of this being here.
     userStorage: {
       getJson: async (file: string, o: any) => {
+        // A read that fails that many times, the way storage that is busy or
+        // offline does.
+        const fails = (opts as any).failReads;
+        if (fails && fails[file] > 0) {
+          fails[file]--;
+          throw new Error("storage is busy");
+        }
         const k = String((o && o.userId) || '') + ':' + file;
         return k in perUser ? perUser[k] : (o && o.fallback) !== undefined ? o.fallback : null;
       },
@@ -9417,4 +9424,57 @@ test("the word swaps example in the docs comes out as the docs say", async () =>
   await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-doc2" });
   await wait(60);
   expect(h.body("m2")).toBe(m![2] + " laughed. " + m![1] + " did not.");
+});
+
+// An account copy that could not be read is never written over, so what is in
+// it is not lost. The next use reads it again.
+describe("an account copy that could not be read", () => {
+  const old = { text: "Older words.", at: 1, chatId: "c1", messageId: "m9", after: "Newer words." };
+
+  test("the replies you can put back are not written over, and are read again next time", async () => {
+    // Failing for every read until the first refine is saved, then working.
+    const fails: Record<string, number> = { "putback.json": 99 };
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>", "<REFINED>She stepped through. The cold hit her.</REFINED>"],
+      { keepOriginal: true, keepPutBack: true, refineAgain: true },
+      chat(),
+      { perUser: { "u1:putback.json": [old] }, failReads: fails },
+    );
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    fails["putback.json"] = 0;
+    expect(h.perUser["u1:putback.json"].map((k: any) => k.messageId)).toEqual(["m9"]);
+    expect(h.notes.some((n) => n.kind === "warning" && /could not be read from your account/.test(n.text))).toBe(true);
+    await h.front({ type: "refine_now", requestId: "r2", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.perUser["u1:putback.json"].map((k: any) => k.messageId).sort()).toEqual(["m2", "m9"]);
+  });
+
+  test("settings that could not be read are answered as failed, not as nothing saved", async () => {
+    const h = await armed([], {}, chat(), { failReads: { "settings.json": 1 } });
+    await h.front({ type: "load_settings", requestId: "s1" });
+    const failed = h.sent.filter((m) => m.type === "loaded_settings").pop();
+    expect(failed.failed).toBe(true);
+    expect(failed.settings).toBeNull();
+    await h.front({ type: "load_settings", requestId: "s2" });
+    const after = h.sent.filter((m) => m.type === "loaded_settings").pop();
+    expect(after.failed).toBe(false);
+  });
+
+  test("the names your word swaps picked are not written over", async () => {
+    const swaps = [{ find: "Elara\nLyra", put: "Brindle\nMaeve\nTolly", same: true }];
+    const h = await armed([], { refineOn: false, swapOn: true, swaps }, [
+      { id: "m0", role: "assistant", content: "The gate stands open." },
+      { id: "m1", role: "user", content: "i wait" },
+      { id: "m2", role: "assistant", content: "Elara waved at Lyra." },
+    ], { perUser: { "u1:swap-picks.json": { v: 1, chats: { c1: { at: 1, picks: { elara: "Maeve" } } } } }, failReads: { "swap-picks.json": 1 } });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-pf1" });
+    await wait(60);
+    // A pick made while the read failed is not written: the file is as it was.
+    expect(h.perUser["u1:swap-picks.json"].chats.c1.picks).toEqual({ elara: "Maeve" });
+    h.edit("m2", "Elara laughed.");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-pf2" });
+    await wait(60);
+    expect(h.body("m2")).toBe("Maeve laughed.");
+  });
 });

@@ -3931,7 +3931,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (typeof localStorage !== "undefined")
           localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
       } catch (_) {}
-      send({ type: "set_settings", settings: forBackend() });
+      // Held and not written while the account copy could not be read.
+      send(unread.settings ? { type: "set_settings", settings: forBackend(), keep: true } : { type: "set_settings", settings: forBackend() });
       // The floating button and the Extras row follow the settings that turn
       // them on, and this is the one place every change passes through. Off
       // this frame, so a switch is not paying for the host's render.
@@ -3960,6 +3961,35 @@ export function setup(ctx: Ctx, overrides?: any) {
   // assumes the host fans a message out to every listener, which is not
   // something worth depending on for the path that loads your settings.
   let accountAsk = "";
+  // What could not be read from the account, by kind. While one is set, this
+  // browser's copy is used and nothing of that kind is written to the
+  // account, so a copy that could not be read is never written over. It is
+  // asked for again in 10 seconds, and when the backend says it is ready.
+  const unread: Record<string, boolean> = {};
+  const unreadSaid: Record<string, boolean> = {};
+  const unreadAgain: Record<string, any> = {};
+  const UNREAD_AGAIN_MS = 10000;
+  function readFailed(what: string, again: () => void) {
+    unread[what] = true;
+    log("problem", "your " + what + " could not be read from your account, so this browser's copy is used and nothing is written to the account. It is asked for again in 10 seconds.");
+    if (!unreadSaid[what]) {
+      unreadSaid[what] = true;
+      toast("Your " + what + " could not be read from your account. They are kept in this browser only for now.", true, "warning");
+    }
+    if (unreadAgain[what]) clearTimeout(unreadAgain[what]);
+    unreadAgain[what] = setTimeout(() => {
+      unreadAgain[what] = null;
+      if (unread[what]) again();
+    }, UNREAD_AGAIN_MS);
+  }
+  function readWorked(what: string) {
+    unread[what] = false;
+    if (unreadAgain[what]) clearTimeout(unreadAgain[what]);
+    unreadAgain[what] = null;
+  }
+  disposers.push(() => {
+    for (const k of Object.keys(unreadAgain)) if (unreadAgain[k]) clearTimeout(unreadAgain[k]);
+  });
 
   function loadFromAccount() {
     accountAsk = "arf-load-" + newId();
@@ -3973,6 +4003,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tookAccountSettings(msg: any): void {
     if (!msg || msg.requestId !== accountAsk) return;
     accountAsk = "";
+    if (msg.failed) return readFailed("settings", loadFromAccount);
+    readWorked("settings");
     const s = msg.settings;
     if (s && typeof s === "object" && Object.keys(s).length) {
       Object.assign(cfg, coerceSaved(carryOldNames(s)));
@@ -5432,6 +5464,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tookAccountState(msg: any): void {
     if (!msg || msg.requestId !== stateAsk) return;
     stateAsk = "";
+    // stateLoaded stays false, which already keeps saveStateToAccount from
+    // writing.
+    if (msg.failed) return readFailed("chats switched off", loadStateFromAccount);
+    readWorked("chats switched off");
     const st = msg.state && typeof msg.state === "object" ? msg.state : null;
     if (st && Array.isArray(st.chatsOff)) {
       // A temporary chat switched off in this browser stays off while it is
@@ -11296,6 +11332,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   // When Test was pressed, so its notification can say how long the answer
   // took. 0 when no test is waiting.
   let jevTestAt = 0;
+  // While a test waits: the seconds are counted on the line under Test, and
+  // after JEV_TEST_WAIT_S it is given up.
+  const JEV_TEST_WAIT_S = 60;
+  let jevTick: any = null;
+  const jevAsking = () => "Asking " + whoName() + " one small question. " + Math.floor((Date.now() - jevTestAt) / 1000) + " s";
+  function jevTestDone() {
+    if (jevTick) clearInterval(jevTick);
+    jevTick = null;
+    jevTestAt = 0;
+    jevAsk = "";
+  }
+  disposers.push(() => {
+    if (jevTick) clearInterval(jevTick);
+    jevTick = null;
+  });
 
   // What stops the second model being asked, in words, or "" when nothing
   // does. Every one of these leaves each reply refined as it is with one model.
@@ -11339,13 +11390,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     const acts = el("div", "arf-row");
     const test = button("Test", false);
     test.setAttribute("data-arf-jev", "test");
-    test.disabled = !!problem || decisions.state !== "ok";
+    // Off while a test is waiting, so it cannot be asked twice at once.
+    test.disabled = !!problem || decisions.state !== "ok" || !!jevTestAt;
     test.style.opacity = test.disabled ? "0.45" : "1";
     test.addEventListener("click", () => {
-      jevSaid = "Asking " + whoName() + " one small question.";
+      if (jevTestAt) return;
       jevAsk = newId();
       jevTestAt = Date.now();
+      jevSaid = jevAsking();
       send({ type: "jev_test", requestId: jevAsk });
+      if (jevTick) clearInterval(jevTick);
+      jevTick = setInterval(() => {
+        if (!jevTestAt) return;
+        if (Date.now() - jevTestAt >= JEV_TEST_WAIT_S * 1000) {
+          jevTestDone();
+          jevSaid = WhoName() + " did not answer in " + JEV_TEST_WAIT_S + " s.";
+          log("judge", "The test of " + whoName() + " got no answer in " + JEV_TEST_WAIT_S + " s", true);
+          paint();
+          return;
+        }
+        jevSaid = jevAsking();
+        const line = tab && tab.root ? (tab.root as HTMLElement).querySelector("[data-arf-jevsaid]") : null;
+        if (line) line.textContent = jevSaid;
+      }, 1000);
       paint();
     });
     acts.appendChild(test);
@@ -14826,8 +14893,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
     } catch (_) {}
     // And up to the account, so a preset saved on a phone is there on a laptop.
+    // Not while the account's presets could not be read.
     try {
-      send({ type: "save_presets", presets: presets });
+      if (!unread.presets) send({ type: "save_presets", presets: presets });
     } catch (_) {}
     passesMoved();
   }
@@ -14882,7 +14950,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         localStorage.setItem(SETUPS_KEY, JSON.stringify(setups));
     } catch (_) {}
     try {
-      send({ type: "save_setups", setups: setups });
+      if (!unread["model setups"]) send({ type: "save_setups", setups: setups });
     } catch (_) {}
     passesMoved();
   }
@@ -14896,6 +14964,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tookAccountSetups(msg: any): void {
     if (!msg || msg.requestId !== setupAsk) return;
     setupAsk = "";
+    if (msg.failed) return readFailed("model setups", loadSetupsFromAccount);
+    readWorked("model setups");
     const clean = Array.isArray(msg.setups) ? cleanSetups(msg.setups) : [];
     if (clean.length) {
       setups = clean;
@@ -15007,6 +15077,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tookAccountPresets(msg: any): void {
     if (!msg || msg.requestId !== presetAsk) return;
     presetAsk = "";
+    if (msg.failed) return readFailed("presets", loadPresetsFromAccount);
+    readWorked("presets");
     presetsHeard = true;
     const list = Array.isArray(msg.presets) ? msg.presets : null;
     const clean = list
@@ -18296,10 +18368,10 @@ export function setup(ctx: Ctx, overrides?: any) {
             // Without asking again, the panel would run on this browser's copy
             // for the whole visit, and its next save would write that copy over
             // the account's.
-            if (accountAsk) loadFromAccount();
-            if (presetAsk) loadPresetsFromAccount();
-            if (setupAsk) loadSetupsFromAccount();
-            if (stateAsk) loadStateFromAccount();
+            if (accountAsk || unread.settings) loadFromAccount();
+            if (presetAsk || unread.presets) loadPresetsFromAccount();
+            if (setupAsk || unread["model setups"]) loadSetupsFromAccount();
+            if (stateAsk || unread["chats switched off"]) loadStateFromAccount();
             askPermissions();
             askBackendVersion();
             reaskRoles();
@@ -18451,7 +18523,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             // for it on the panel: green with the model and the time when the
             // key works, red with the reason when it does not.
             const took = jevTestAt ? Date.now() - jevTestAt : 0;
-            jevTestAt = 0;
+            jevTestDone();
             toast(
               msg.ok
                 ? WhoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +

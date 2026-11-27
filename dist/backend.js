@@ -210,8 +210,10 @@ const putBackWas = new Map();
 async function savePutBack(userId, on = keepPutBack) {
     if (!hasUserStorage())
         return;
-    if (on)
-        await readPutBack(userId, true);
+    // A saved copy that could not be read is never written over: the replies in
+    // it would be lost. The next save reads it again.
+    if (on && !(await readPutBack(userId, true)))
+        return;
     const list = on ? keptFor(userId) : [];
     return inTurn(putBackWrites, userId, async () => {
         try {
@@ -251,22 +253,31 @@ async function forgetKept(userId, hit) {
 }
 // Read once per account after a start, with the switch on, so an update or a
 // restart does not lose the list. Entries already in memory are newer and win.
+// Marked as read only once a read works, so a failed one is tried again, and
+// false while the saved copy has not been read.
 async function readPutBack(userId, on = keepPutBack) {
     const who = userKey(userId);
     if (putBackRead.has(who))
-        return;
-    putBackRead.add(who);
-    if (!on || !hasUserStorage())
-        return;
+        return true;
+    if (!on || !hasUserStorage()) {
+        putBackRead.add(who);
+        return true;
+    }
     let list = null;
     try {
         list = await spindle.userStorage.getJson(PUTBACK_FILE, { fallback: [], userId: userId });
     }
-    catch (_) {
-        list = null;
+    catch (e) {
+        const why = 'the replies you can put back could not be read from your account, so nothing was saved over them. They are read again next time: ' + ((e && e.message) || 'no reason given');
+        say('warn', why);
+        notify('warning', why.charAt(0).toUpperCase() + why.slice(1) + '.', userId);
+        return false;
     }
+    if (putBackRead.has(who))
+        return true;
+    putBackRead.add(who);
     if (!Array.isArray(list))
-        return;
+        return true;
     for (const one of list) {
         if (!one || typeof one.text !== 'string' || one.chatId == null || one.messageId == null)
             continue;
@@ -284,6 +295,7 @@ async function readPutBack(userId, on = keepPutBack) {
             kind: one.kind === 'swap' ? 'swap' : undefined,
         }, BEFORE_MAX);
     }
+    return true;
 }
 // Messages this run has already refined, each against a mark of the text the
 // refine left in it. Whether that stops a later one is the reader's to say, in
@@ -382,12 +394,19 @@ function hasUserStorage() {
 // somebody who had them a minute ago.
 async function readUserJson(file, userId) {
     if (hasUserStorage()) {
+        // A read that failed is told apart from a file that is not there: it
+        // throws, so nothing is written over an account copy that was never read.
+        let failed = null;
         try {
             const v = await spindle.userStorage.getJson(file, { fallback: null, userId: userId });
             if (v != null)
                 return v;
         }
-        catch (_) { /* fall through to the old store */ }
+        catch (e) {
+            failed = e;
+        }
+        if (failed)
+            throw new Error('the account copy of ' + file + ' could not be read: ' + ((failed && failed.message) || 'no reason given'));
         let legacy = null;
         try {
             legacy = JSON.parse(await spindle.storage.read(file));
@@ -6379,9 +6398,12 @@ async function readSwapPicks(userId) {
             got = await spindle.userStorage.getJson(SWAP_PICKS_FILE, { fallback: null, userId: userId });
         }
         catch (e) {
+            // Not kept, so the next swap reads again, and nothing is saved over the
+            // account's picks until a read works.
             const why = 'the names already picked for your word swaps could not be read, so new ones may be picked: ' + ((e && e.message) || 'no reason given');
             say('warn', why);
             replyTo(userId, { type: 'swap_trouble', why: why });
+            return {};
         }
     }
     const clean = {};
@@ -6404,7 +6426,9 @@ async function readSwapPicks(userId) {
     return clean;
 }
 function saveSwapPicks(userId) {
-    if (!hasUserStorage())
+    // Only once the account's picks were read, so a failed read never writes
+    // over them.
+    if (!hasUserStorage() || !swapPicks.has(userKey(userId)))
         return Promise.resolve();
     return inTurn(swapPickWrites, userId, async () => {
         const all = swapPicks.get(userKey(userId)) || {};
@@ -7838,13 +7862,18 @@ async function onPanel(payload, userId) {
         // that runs at startup has no user to resolve.
         if (payload.type === 'load_settings') {
             let saved = null;
+            // failed: the account could not be read, which is not the same as
+            // nothing saved there. The panel then keeps its copy and writes nothing.
+            let failed = false;
             try {
                 saved = await readUserJson(SETTINGS_FILE, userId);
             }
-            catch (_) {
+            catch (e) {
                 saved = null;
+                failed = true;
+                say('warn', (e && e.message) || 'the account could not be read');
             }
-            replyTo(userId, { type: 'loaded_settings', requestId: payload.requestId, settings: saved });
+            replyTo(userId, { type: 'loaded_settings', requestId: payload.requestId, settings: saved, failed: failed });
             return;
         }
         // In the order they were sent, for the same reason as the settings: two
@@ -7864,13 +7893,18 @@ async function onPanel(payload, userId) {
         }
         if (payload.type === 'load_presets') {
             let saved = null;
+            // failed: the account could not be read, which is not the same as
+            // nothing saved there. The panel then keeps its copy and writes nothing.
+            let failed = false;
             try {
                 saved = await readUserJson(PRESETS_FILE, userId);
             }
-            catch (_) {
+            catch (e) {
                 saved = null;
+                failed = true;
+                say('warn', (e && e.message) || 'the account could not be read');
             }
-            replyTo(userId, { type: 'loaded_presets', requestId: payload.requestId, presets: saved });
+            replyTo(userId, { type: 'loaded_presets', requestId: payload.requestId, presets: saved, failed: failed });
             return;
         }
         if (payload.type === 'save_setups') {
@@ -7899,24 +7933,34 @@ async function onPanel(payload, userId) {
         }
         if (payload.type === 'load_state') {
             let saved = null;
+            // failed: the account could not be read, which is not the same as
+            // nothing saved there. The panel then keeps its copy and writes nothing.
+            let failed = false;
             try {
                 saved = await readUserJson(STATE_FILE, userId);
             }
-            catch (_) {
+            catch (e) {
                 saved = null;
+                failed = true;
+                say('warn', (e && e.message) || 'the account could not be read');
             }
-            replyTo(userId, { type: 'loaded_state', requestId: payload.requestId, state: saved });
+            replyTo(userId, { type: 'loaded_state', requestId: payload.requestId, state: saved, failed: failed });
             return;
         }
         if (payload.type === 'load_setups') {
             let saved = null;
+            // failed: the account could not be read, which is not the same as
+            // nothing saved there. The panel then keeps its copy and writes nothing.
+            let failed = false;
             try {
                 saved = await readUserJson(SETUPS_FILE, userId);
             }
-            catch (_) {
+            catch (e) {
                 saved = null;
+                failed = true;
+                say('warn', (e && e.message) || 'the account could not be read');
             }
-            replyTo(userId, { type: 'loaded_setups', requestId: payload.requestId, setups: saved });
+            replyTo(userId, { type: 'loaded_setups', requestId: payload.requestId, setups: saved, failed: failed });
             return;
         }
         // Stopping whatever is in flight for this reader. Answered even when there
