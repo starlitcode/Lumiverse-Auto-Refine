@@ -21,6 +21,10 @@ _2026-11-27_
 
 - **Word swaps never leave a reply with no words.** If the swaps would take out every word, the reply is left as it was.
 
+### Removed
+
+- **More checks you can add.** The fold under **What the second model checks**, on the Model tab, is gone. Any of its checks you already added stay in your box until you take them out.
+
 ---
 
 ## 1.58.0

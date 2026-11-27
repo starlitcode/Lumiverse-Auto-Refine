@@ -7942,7 +7942,7 @@ async function autoPass(p: any, who: any): Promise<void> {
     while (leftForRetry.size > LEFT_MAX) leftForRetry.delete(leftForRetry.keys().next().value as string);
   };
   if (await verdictFor(p.chatId))
-    say('info', 'Auto Retry said it was judging this reply and gave no verdict in time, so the ' + (swapsOnly ? 'word swaps go' : 'refine goes') + ' ahead');
+    say('info', 'Auto Retry said it was judging this reply and gave no verdict in time, so the ' + (swapsOnly ? 'word swaps and Cut filler go' : 'refine goes') + ' ahead');
   if (retryPending(p.chatId)) {
     leave();
     return stand('Auto Retry is going to retry this reply, so it was left', messageId);
