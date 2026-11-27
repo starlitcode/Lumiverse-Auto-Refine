@@ -134,6 +134,15 @@ const settle = (page) =>
     () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
   );
 
+// Something taken off the panel leaves over several frames, and the panel is
+// drawn again once it has gone. Waits for every leave on the page to end,
+// then for the panel to be drawn.
+const leftAll = async (page) => {
+  await page.waitForFunction(() => !document.querySelector("[data-arf-folding]"), null, { timeout: 3000 }).catch(() => {});
+  await settle(page);
+  await settle(page);
+};
+
 // A row switched off closes over a few frames rather than going in one, the same
 // way a deleted block does, so anything asking whether it is gone waits that out
 // first. Long enough for the 240ms fold plus a frame either side.
@@ -2835,7 +2844,7 @@ console.log("\nwhat the second model decided");
       const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
       b.click();
     });
-    await settle(page);
+    await leftAll(page);
     const cleared = await card(page);
     ok("Clear empties the card and the count", !!cleared && /Nothing yet/.test(cleared.text), JSON.stringify(cleared));
 
@@ -3726,7 +3735,7 @@ console.log("\naccepting or turning one down");
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-pending="accept"]').click();
     });
-    await settle(page);
+    await leftAll(page);
     const took = await page.evaluate(() => ({
       sent: window.__sent.filter((m) => m.type === "apply_refine").pop(),
       gone: !/Waiting for you/.test(document.querySelector("#drawer").textContent),
@@ -3743,7 +3752,7 @@ console.log("\naccepting or turning one down");
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-pending="decline"]').click();
     });
-    await settle(page);
+    await leftAll(page);
     const left = await page.evaluate(() => ({
       saved: window.__sent.filter((m) => m.type === "apply_refine").length,
       gone: !/Waiting for you/.test(document.querySelector("#drawer").textContent),
@@ -11074,7 +11083,8 @@ console.log("\nsaying the built-in prompts have changed");
     const after = await page.evaluate(async () => {
       document.querySelector('#drawer [data-arf-builtinmoved="dismiss"]').click();
       // The line leaves over a few frames.
-      await new Promise((r) => setTimeout(r, 450));
+      for (let i = 0; i < 100 && document.querySelector("[data-arf-folding]"); i++) await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
         gone: !document.querySelector("#drawer [data-arf-builtinmoved]"),
@@ -11628,7 +11638,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     page.evaluate(async (which) => {
       document.querySelector('#drawer [data-arf-moveddefault="' + which + '"]').click();
       await new Promise((r) => setTimeout(r, 200));
-    }, which);
+    }, which).then(() => leftAll(page));
   // The account's answer to the panel's first ask.
   const account = (page, settings) =>
     page.evaluate(async (settings) => {
@@ -16887,9 +16897,7 @@ for (const [label, viewport, touch, zoom] of [
       window.__sentBefore = window.__sent.length;
     });
     await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="accept"]').click());
-    // The card leaves over a few frames before the panel is drawn again.
-    await page.waitForTimeout(400);
-    await settle(page);
+    await leftAll(page);
     const applied = await page.evaluate(() => window.__sent.slice(window.__sentBefore).filter((m) => m.type === "apply_refine"));
     ok(label + ": Accept it saves the swaps", applied.length === 1 && applied[0].after === "Brindle waved." && applied[0].before === "Elara waved.", JSON.stringify(applied));
     await question("m11");
@@ -16899,8 +16907,7 @@ for (const [label, viewport, touch, zoom] of [
       window.__toasts = [];
     });
     await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
-    await page.waitForTimeout(400);
-    await settle(page);
+    await leftAll(page);
     const declined = await page.evaluate(() => ({
       applied: window.__sent.slice(window.__sentBefore).filter((m) => m.type === "apply_refine").length,
       card: !!document.querySelector("#drawer [data-arf-pending-kind]"),

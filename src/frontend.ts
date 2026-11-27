@@ -3347,6 +3347,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // first, since anything can paint.
   let leaving = 0;
   let paintOwed = false;
+  let leaveGen = 0;
   const disposers: Array<() => void> = [];
   // Set once this copy has been shut down. An update made while the page stays
   // open can leave a button of this copy on the page after that.
@@ -4149,7 +4150,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     paintFrameAsked = true;
     const go = () => {
       paintFrameAsked = false;
-      if (!tornDown) paint();
+      // Used for a refine that has just landed, which is shown at once.
+      if (!tornDown) paintNow();
     };
     try {
       requestAnimationFrame(() => setTimeout(go, 0));
@@ -4594,14 +4596,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const box = mine.node || composer();
     if (box && setComposer(box, mine.before)) {
       // The card leaves first, and the panel changes after.
-      leaveThen(onTab("[data-arf-draft-undo]"), () => {
-        lastDraft = null;
-        unwatchDraft();
-        log("answer", "put your draft back", true);
-        toast("Your draft is back as it was.");
-        paintFloat();
-        paint();
-      });
+      leaveThen(onTab("[data-arf-draft-undo]"));
+      lastDraft = null;
+      unwatchDraft();
+      log("answer", "put your draft back", true);
+      toast("Your draft is back as it was.");
+      paintFloat();
+      paint();
       return;
     }
     toast("Could not write to the input box.", true, "error");
@@ -7801,7 +7802,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       b.addEventListener("click", () => {
         cfg.tab = t.id;
         persist(true);
-        paint();
+        // A tab pressed is shown at once, whatever is leaving.
+        paintNow();
       });
       strip.appendChild(b);
     }
@@ -8215,18 +8217,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       const take = button("Take it", true);
       take.setAttribute("data-arf-moveddefault", "take");
       take.addEventListener("click", () => {
+        leaveThen(line);
         for (const m of moved) (cfg as any)[m.key] = (CONFIG as any)[m.key];
         markMovedSeen();
         persist(true);
         toast(moved.length === 1 ? "Taken the new default." : "Taken the new defaults.");
-        leaveThen(line, () => paint());
+        paint();
       });
       line.appendChild(take);
       const keep = button("Keep mine", false);
       keep.setAttribute("data-arf-moveddefault", "keep");
       keep.addEventListener("click", () => {
+        leaveThen(line);
         markMovedSeen();
-        leaveThen(line, () => paint());
+        paint();
       });
       line.appendChild(keep);
       root.appendChild(line);
@@ -8639,8 +8643,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // again, since pending is already empty.
     // The answer goes at once. The panel is painted again once the card has
     // left.
-    const asking = onTab("[data-arf-pending-kind]");
-    if (asking) leaveThen(asking, () => {});
+    leaveThen(onTab("[data-arf-pending-kind]"));
     answerPending(one, yes);
   }
   function answerPending(one: typeof pending, yes: boolean) {
@@ -9117,12 +9120,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     back.addEventListener("click", () => putDraftBack());
     const seen = button("Dismiss", false);
     seen.addEventListener("click", () => {
-      leaveThen(onTab("[data-arf-draft-undo]"), () => {
-        lastDraft = null;
-        unwatchDraft();
-        paintFloat();
-        paint();
-      });
+      leaveThen(onTab("[data-arf-draft-undo]"));
+      lastDraft = null;
+      unwatchDraft();
+      paintFloat();
+      paint();
     });
     const big = button("Read it in full", false);
     big.addEventListener("click", () =>
@@ -9152,12 +9154,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     seen.setAttribute("data-arf-undo", "dismiss");
     seen.addEventListener("click", () => {
       const k = undoKey(one.chatId, one.messageId);
-      leaveThen(onTab('[data-arf-undo-row="' + k + '"]'), () => {
-        undoable.delete(k);
-        forgetUndo([one]);
-        if (!undoHere().length) setBadge(null);
-        paint();
-      });
+      leaveThen(onTab('[data-arf-undo-row="' + k + '"]'));
+      undoable.delete(k);
+      forgetUndo([one]);
+      if (!undoHere().length) setBadge(null);
+      paint();
     });
     // The before and after at the size of the screen.
     const big = button("Expand", false);
@@ -9427,22 +9428,43 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and its space closes over several frames, so what is under it moves up
   // with it. With Reduce motion it goes at once. done runs once, after every
   // node has gone, and at once when there is nothing on screen to move.
-  function leaveThen(nodes: any, done: () => void) {
+  //
+  // What the press does is done by the caller at once, after this starts:
+  // telling the backend, clearing, answering. Only the drawing waits. A paint
+  // asked for meanwhile runs once the last leave has ended, unless something
+  // new has to be shown, which paintNow draws at once.
+  function leaveThen(nodes: any, done?: () => void) {
     const list = (Array.isArray(nodes) ? nodes : [nodes]).filter((n: any) => n && n.isConnected);
-    if (!list.length) return done();
+    if (!list.length) {
+      if (done) done();
+      return;
+    }
     let left = list.length;
+    const gen = leaveGen;
     leaving++;
     for (const n of list)
       foldAway(n, () => {
         left--;
         if (left > 0) return;
+        if (done) done();
+        // Cut short by paintNow, which has drawn the panel already.
+        if (gen !== leaveGen) return;
         leaving--;
-        done();
         if (leaving === 0 && paintOwed) {
           paintOwed = false;
           paint();
         }
       });
+  }
+  // A paint that cannot wait for a leave to end: something new to show, or a
+  // tab the reader pressed. Any leave still running is cut short.
+  function paintNow(was?: Map<string, boolean>) {
+    if (leaving > 0) {
+      leaveGen++;
+      leaving = 0;
+      paintOwed = false;
+    }
+    paint(was);
   }
 
   // A row on the tab found by its mark, or null.
@@ -10524,8 +10546,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const gotIt = button("Got it", false);
       gotIt.setAttribute("data-arf-builtinmoved", "dismiss");
       gotIt.addEventListener("click", () => {
+        leaveThen(moved);
         markBuiltInSeen();
-        leaveThen(moved, () => paint());
+        paint();
       });
       moved.appendChild(gotIt);
       wrap.appendChild(moved);
@@ -12513,11 +12536,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     clear.addEventListener("click", () => {
       // Everything under the card's heading leaves, then the card says
       // there is nothing yet.
-      leaveThen(Array.from(wrap.children).filter((c: any) => !c.classList.contains("arf-cardh")), () => {
-        jevLast = null;
-        jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
-        paint();
-      });
+      leaveThen(Array.from(wrap.children).filter((c: any) => !c.classList.contains("arf-cardh")));
+      jevLast = null;
+      jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
+      paint();
     });
     rowB.appendChild(clear);
     wrap.appendChild(rowB);
@@ -12576,10 +12598,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
-      leaveThen(Array.from(wrap.children).filter((c: any) => !c.classList.contains("arf-cardh")), () => {
-        keptNotes = null;
-        paint();
-      });
+      leaveThen(Array.from(wrap.children).filter((c: any) => !c.classList.contains("arf-cardh")));
+      keptNotes = null;
+      paint();
     });
     row.appendChild(copy);
     row.appendChild(big);
@@ -12645,7 +12666,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const clear = button("Clear the log", false);
     clear.className += " arf-danger";
     clear.addEventListener("click", () => {
-      leaveThen(allOnTab("[data-arf-logline]").filter((n) => !n.hidden), clearTheLog);
+      leaveThen(allOnTab("[data-arf-logline]").filter((n) => !n.hidden));
+      clearTheLog();
     });
     const clearTheLog = () => {
       activity.length = 0;
@@ -18607,7 +18629,8 @@ export function setup(ctx: Ctx, overrides?: any) {
               true,
               msg.ok ? "success" : "error",
             );
-            paint();
+            // A new result is shown at once, whatever is leaving.
+            paintNow();
             return;
           }
           if (msg.type === "backend_version") {
@@ -19203,7 +19226,8 @@ export function setup(ctx: Ctx, overrides?: any) {
             // A row that goes leaves first, and the panel changes after, since
             // anything that paints would take the row away in one step.
             const goes = !!about && (msg.ok || !!msg.gone);
-            leaveThen(goes ? onTab('[data-arf-undo-row="' + undoKey(about!.chatId, about!.messageId) + '"]') : null, () => {
+            leaveThen(goes ? onTab('[data-arf-undo-row="' + undoKey(about!.chatId, about!.messageId) + '"]') : null);
+            {
             if (msg.ok) {
               if (about) undoable.delete(undoKey(about.chatId, about.messageId));
               // The card on the page is about this refine, and this refine is
@@ -19230,7 +19254,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               }
             }
             paint();
-            });
+            }
             return;
           }
           if (msg.type === "confirm_refine") {
@@ -19252,7 +19276,8 @@ export function setup(ctx: Ctx, overrides?: any) {
                   setBadge("1");
             log("answer", msg.kind === "swap" ? "word swaps are waiting for you" : "a refine is waiting for you", true);
             ping();
-            paint();
+            // A new question is shown at once, whatever is leaving.
+            paintNow();
             // And as a modal where the host can draw one, since this is a
             // question holding something up. The card is the same decision and
             // stays until one of them is answered.
