@@ -9400,6 +9400,136 @@ describe("word swaps", () => {
   });
 });
 
+// Cut filler: the Decision model is asked about each sentence of a new reply
+// in one call, and the sentences it is sure enough are filler are taken out.
+describe("Cut filler", () => {
+  const REPLY = "Bram lit the stove in the cold kitchen. His pulse quickened. The kettle ticked as it warmed on the iron ring. A long moment passed.";
+  const chat = (reply = REPLY): Msg[] => [
+    { id: "m0", role: "assistant", content: "The house is quiet tonight." },
+    { id: "m1", role: "user", content: "i put the kettle on" },
+    { id: "m2", role: "assistant", content: reply },
+  ];
+  // Sure about two sentences, and not the others.
+  const sure: Record<string, number> = { "pulse quickened": 0.97, "long moment passed": 0.93 };
+  const answer = (init: any) => {
+    const body = JSON.parse(init.body);
+    const answers: Record<string, any> = {};
+    for (const id of Object.keys(body.questions)) {
+      const q = String(body.questions[id].instructions);
+      const hit = Object.keys(sure).find((k) => q.includes(k));
+      answers[id] = { type: "noul", noul: hit ? sure[hit] : 0.1 };
+    }
+    return { status: 200, body: JSON.stringify({ answers: answers, model: "test-model" }) };
+  };
+  const run = async (over: any = {}, reply = REPLY, jev: any = (_u: string, init: any) => answer(init)) => {
+    const h = await armed([], { refineOn: false, fillerOn: true, ...over }, chat(reply), { jev: jev });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-" + Math.random() });
+    await wait(80);
+    return h;
+  };
+
+  test("the sentences it is sure enough about go, in one call, and the Log says how sure", async () => {
+    const h = await run({ fillerCutMax: 100 });
+    expect(h.body("m2")).toBe("Bram lit the stove in the cold kitchen. The kettle ticked as it warmed on the iron ring.");
+    expect(h.jevCalls.length).toBe(1);
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.kind).toBe("swap");
+    expect(said.swapped).toEqual(['"His pulse quickened." cut as filler, 97% sure', '"A long moment passed." cut as filler, 93% sure']);
+    expect(said.canUndo).toBe(true);
+  });
+
+  test("each question holds its sentence where {{sentence}} is, and the reply is sent with it", async () => {
+    const h = await run();
+    const body = h.jevCalls[0].body;
+    expect(body.state.reply).toBe(REPLY);
+    const qs = Object.values(body.questions).map((q: any) => q.instructions);
+    expect(qs.length).toBe(4);
+    expect(qs[1]).toBe(
+      'This sentence from `reply` is filler: "His pulse quickened."\nFiller is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw, or a line that says again what `reply` already said. `reply` reads the same without it.',
+    );
+  });
+
+  test("a question of your own without {{sentence}} has the sentence added at the end", async () => {
+    const h = await run({ fillerCheck: "`sentence` is padding." });
+    const qs = Object.values(h.jevCalls[0].body.questions).map((q: any) => q.instructions);
+    expect(qs[1]).toBe('`sentence` is padding.\n"His pulse quickened."');
+  });
+
+  test("the cut line: a sentence under it stays", async () => {
+    const h = await run({ fillerOver: 95, fillerCutMax: 100 });
+    expect(h.body("m2")).toBe("Bram lit the stove in the cold kitchen. The kettle ticked as it warmed on the iron ring. A long moment passed.");
+  });
+
+  test("the limit: the surest goes first, and the rest stays", async () => {
+    const h = await run({ fillerCutMax: 20 });
+    expect(h.body("m2")).toBe("Bram lit the stove in the cold kitchen. The kettle ticked as it warmed on the iron ring. A long moment passed.");
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped[1]).toBe("1 more sentence was left in, so that no more than 20% of the reply is taken out");
+  });
+
+  // The example in docs/filler.md, with every setting left as it starts.
+  test("the example on the docs page", async () => {
+    const h = await run();
+    expect(h.body("m2")).toBe("Bram lit the stove in the cold kitchen. The kettle ticked as it warmed on the iron ring. A long moment passed.");
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped).toEqual([
+      '"His pulse quickened." cut as filler, 97% sure',
+      "1 more sentence was left in, so that no more than 30% of the reply is taken out",
+    ]);
+  });
+
+  test("Leave dialogue alone: a sentence with dialogue is not asked about", async () => {
+    const reply = 'Bram lit the stove. "His pulse quickened," she read aloud. A long moment passed.';
+    let h = await run({ fillerCutMax: 100 }, reply);
+    expect(Object.keys(h.jevCalls[0].body.questions).length).toBe(2);
+    expect(h.body("m2")).toBe('Bram lit the stove. "His pulse quickened," she read aloud.');
+    h = await run({ fillerCutMax: 100, fillerTalk: false }, reply);
+    expect(Object.keys(h.jevCalls[0].body.questions).length).toBe(3);
+  });
+
+  test("a reply is never emptied", async () => {
+    sure["bram lit"] = 0.99;
+    try {
+      const reply = "His pulse quickened. A long moment passed.";
+      const h = await run({ fillerCutMax: 100, fillerOver: 50 }, reply, (_u: string, init: any) => {
+        const body = JSON.parse(init.body);
+        const answers: Record<string, any> = {};
+        for (const id of Object.keys(body.questions)) answers[id] = { type: "noul", noul: 0.99 };
+        return { status: 200, body: JSON.stringify({ answers }) };
+      });
+      expect(h.body("m2")).toBe(reply);
+    } finally {
+      delete sure["bram lit"];
+    }
+  });
+
+  test("a Decision model that cannot be asked leaves the reply as it was, and says why in plain words", async () => {
+    const h = await run({}, REPLY, () => ({ status: 401, body: '{"error":"no"}' }));
+    expect(h.body("m2")).toBe(REPLY);
+    const trouble = h.sent.find((x: any) => x.type === "swap_trouble");
+    expect(trouble.why).toMatch(/^Cut filler could not ask the Decision model, so the reply was left as it was: the second model could not be asked: Provider answered 401/);
+    // No Decision connection set up at all.
+    const none = await run({}, REPLY, null);
+    const why = none.sent.find((x: any) => x.type === "swap_trouble").why;
+    expect(why).toMatch(/no default Decision connection/);
+  });
+
+  test("Ask before cutting holds the cuts for a yes, and names them", async () => {
+    const h = await run({ fillerCutMax: 100, fillerAsk: true });
+    expect(h.body("m2")).toBe(REPLY);
+    const ask = h.sent.find((x: any) => x.type === "confirm_refine");
+    expect(ask.kind).toBe("swap");
+    expect(ask.cuts).toBe(2);
+    expect(ask.after).toBe("Bram lit the stove in the cold kitchen. The kettle ticked as it warmed on the iron ring.");
+  });
+
+  test("off, the Decision model is not asked", async () => {
+    const h = await run({ fillerOn: false });
+    expect(h.jevCalls.length).toBe(0);
+    expect(h.body("m2")).toBe(REPLY);
+  });
+});
+
 // Swaps with nothing to put instead can take out the whole sentence, or the
 // end of it, and can leave dialogue alone. A limit keeps them from taking out
 // too much of a reply, and a reply is never emptied.

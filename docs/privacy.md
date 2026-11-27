@@ -32,7 +32,7 @@ Two things are taken out of a message before it is sent:
 
 Your settings are never sent. Nothing from a chat you are not in is sent. [Word swaps](swaps.md) send nothing: they are made on your server with no model call.
 
-The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. With two models on, the call to the second model goes through Lumiverse, with `spindle.decisions`, to the Decision connection in use.
+The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. With two models or Cut filler on, the call to the Decision model goes through Lumiverse, with `spindle.decisions`, to the Decision connection in use.
 
 ## The second model
 
@@ -51,6 +51,15 @@ The key for the Decision connection is kept by Lumiverse, with the connection. A
 
 Older versions kept a key for the second model in Lumiverse's secure store. This version deletes those keys the first time it loads your settings.
 
+## Cut filler
+
+With **Cut filler from each reply** on, each new reply is sent to the Decision connection in use, the same one two models use. It goes through Lumiverse to that connection's provider. It receives:
+
+- the reply, with its thinking taken out
+- one question for each sentence, made from **What it asks about each sentence**, with the sentence in it
+
+A sentence with dialogue in it is left out while **Leave dialogue alone** is on, and a sentence with code, a link or a tag is always left out. Nothing else is sent. See [Cut filler](filler.md#what-it-sends).
+
 ## The eight permissions
 
 | Permission | What it is for | Without it |
@@ -62,7 +71,7 @@ Older versions kept a key for the second model in Lumiverse's secure store. This
 | `characters` | Reads the character card, so a rewrite keeps each character's voice. | The card block is left out. Refining carries on. |
 | `world_books` | Reads the lorebook entries this chat has active, so a rewrite does not contradict them. | The lore block is left out. Refining carries on. |
 | `ui_panels` | The floating button, which is off by default. | Everything works except that button, and the panel says so. |
-| `decisions` | Asks the second model through your Decision connection, with two models on, which is off by default. | Two-model mode refines every reply, like one model. Nothing else changes. |
+| `decisions` | Asks your Decision connection, with two models or Cut filler on. Both are off by default. | Two-model mode refines every reply, like one model, and Cut filler cuts nothing. Nothing else changes. |
 
 The ones that read your chat, card and lore make a rewrite sound like your characters. Refusing them lowers quality, but the extension still works.
 

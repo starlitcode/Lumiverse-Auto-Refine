@@ -187,9 +187,9 @@ const PARTS = [
     },
     {
         id: "swaps",
-        label: "Word swaps",
-        what: "The words and phrases swapped in each reply. The names already picked in each chat stay on your account and are not in a file.",
-        keys: ["swapOn", "swapAsk", "swapCutMax", "swaps"],
+        label: "Word swaps and Cut filler",
+        what: "The words and phrases swapped in each reply, and Cut filler. The names already picked in each chat stay on your account and are not in a file.",
+        keys: ["swapOn", "swapAsk", "swapCutMax", "swaps", "fillerOn", "fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck"],
     },
     {
         id: "switches",
@@ -329,6 +329,10 @@ const BEFORE_CHECKS = [
 // The check sent with the worn-out phrases, with Also check for worn-out
 // phrases on. The backend holds the same text for settings that do not carry it.
 const WORN_CHECK = "`reply` contains at least one phrase listed in `worn_phrases`.";
+// What Cut filler asks the Decision model about each sentence, the same text
+// as the backend's. {{sentence}} is where each sentence goes.
+const FILLER_CHECK = "This sentence from `reply` is filler: {{sentence}}\n" +
+    "Filler is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw, or a line that says again what `reply` already said. `reply` reads the same without it.";
 // What the refine model is told before the checks in {{checks_found}}.
 // {{second_model}} becomes the second model's name and {{checks_line}} the
 // reader's line, filled in by the backend, which holds the same text. It calls
@@ -635,6 +639,20 @@ const CONFIG = {
     // or its end may remove. 30 by default. A reply is never emptied.
     swapCutMax: 30,
     swaps: [],
+    // Cut filler: the Decision model is asked about each sentence of a new
+    // reply, and the ones it is sure enough are filler are taken out. Off by
+    // default.
+    fillerOn: false,
+    // Ask before cutting: the cuts wait for a yes. Off by default.
+    fillerAsk: false,
+    // How sure the Decision model must be, in percent.
+    fillerOver: 90,
+    // Sentences with dialogue are not asked about. On by default.
+    fillerTalk: true,
+    // The most of a reply, in percent, it may take out.
+    fillerCutMax: 30,
+    // What it asks about each sentence.
+    fillerCheck: FILLER_CHECK,
     // Phrases this chat has worn out. Off by default, since it reads the chat's
     // replies. The list goes wherever a block holds {{overused}}.
     wornOn: false,
@@ -2445,7 +2463,8 @@ const JUDGE_FIELDS = [
         label: "Which Decision connection",
         type: "pick",
         options: [],
-        needs: { key: "judgeMode", is: "two" },
+        // Two models and Cut filler both ask through it.
+        when: (c) => c.judgeMode === "two" || !!c.fillerOn,
         hint: "Set these up under Decision models in Lumiverse's Connections panel. Lumiverse keeps the key.",
     },
     {
@@ -7647,7 +7666,7 @@ export function setup(ctx, overrides) {
         if (id === "model")
             return [buildConnectionCard(), buildSamplerCard(), buildSetupCard(), buildJudgeCard()];
         if (id === "limits")
-            return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard(), buildSwapCard()];
+            return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard(), buildSwapCard(), buildFillerCard()];
         if (id === "log") {
             const jev = cfg.judgeMode === "two" ? [buildJevCard()] : [];
             return [buildLiveCard(), buildNotesCard(), ...jev, buildActivityCard(), buildDebugCard()];
@@ -8511,6 +8530,14 @@ export function setup(ctx, overrides) {
     // What the question is about, in its own words.
     const pendingIsSwap = (one) => !!one && one.kind === "swap";
     const pendingHasSwaps = (one) => !!one && Array.isArray(one.swapped) && one.swapped.length > 0;
+    // Word swaps, filler cuts, or both, named for the question.
+    const swapWhat = (one) => {
+        const cuts = one && Number(one.cuts) > 0 ? Number(one.cuts) : 0;
+        const all = one && Array.isArray(one.swapped) ? one.swapped.length : 0;
+        if (!cuts)
+            return "word swaps";
+        return all > cuts ? "word swaps and filler cuts" : "filler cuts";
+    };
     function takePending(yes) {
         const one = pending;
         pending = null;
@@ -8540,10 +8567,10 @@ export function setup(ctx, overrides) {
                 before: one.before,
                 after: one.after,
             });
-            log("answer", pendingIsSwap(one) ? "accepted word swaps" : "accepted a refine", true);
+            log("answer", pendingIsSwap(one) ? "accepted " + swapWhat(one) : "accepted a refine", true);
         }
         else {
-            log("answer", pendingIsSwap(one) ? "turned word swaps down" : "turned a refine down");
+            log("answer", pendingIsSwap(one) ? "turned " + swapWhat(one) + " down" : "turned a refine down");
             toast("Left as it was.", true);
         }
         paint();
@@ -8551,9 +8578,9 @@ export function setup(ctx, overrides) {
     function buildPendingCard() {
         const one = pending;
         const wrap = card("Waiting for you", pendingIsSwap(one)
-            ? "These word swaps are made and nothing has been saved. Read both and say which one stands."
+            ? "These " + swapWhat(one) + " are made and nothing has been saved. Read both and say which one stands."
             : "This refine is written and nothing has been saved. Read both and say which one stands." +
-                (pendingHasSwaps(one) ? " The rewrite includes word swaps." : ""), new Date(one.at).toTimeString().slice(0, 5));
+                (pendingHasSwaps(one) ? " The rewrite includes " + swapWhat(one) + "." : ""), new Date(one.at).toTimeString().slice(0, 5));
         wrap.setAttribute("data-arf-pending-kind", pendingIsSwap(one) ? "swap" : pendingHasSwaps(one) ? "refine-swaps" : "refine");
         // Marked the same way as every other before and after, with the switch
         // between the two views.
@@ -8567,7 +8594,7 @@ export function setup(ctx, overrides) {
         no.setAttribute("data-arf-pending", "decline");
         no.addEventListener("click", () => takePending(false));
         const big = button("Read it in full", false);
-        big.addEventListener("click", () => openBig("Both versions", "As it is now\n\n" + one.before + "\n\n---\n\n" + (pendingIsSwap(one) ? "After the word swaps" : "After the refine") + "\n\n" + one.after));
+        big.addEventListener("click", () => openBig("Both versions", "As it is now\n\n" + one.before + "\n\n---\n\n" + (pendingIsSwap(one) ? "After the " + swapWhat(one) : "After the refine") + "\n\n" + one.after));
         row.appendChild(yes);
         row.appendChild(no);
         row.appendChild(big);
@@ -11791,6 +11818,74 @@ export function setup(ctx, overrides) {
             if (f.key === "refineGreeting")
                 wrap.appendChild(hangsOff(bad("The greeting is written by the card's author. A refine rewrites it, and can change its formatting or what it says. Put it back can undo it while Keep what a refine replaced is on."), "refineGreeting", "greeting warning"));
         }
+        return wrap;
+    }
+    // Cut filler: the Decision model is asked about each sentence of a reply,
+    // and the sentences it is sure enough are filler are taken out whole.
+    function buildFillerCard() {
+        const wrap = card("Cut filler", "Sentences your Decision model is sure are filler are taken out of each new reply. Nothing is rewritten.");
+        wrap.setAttribute("data-arf-filler", "1");
+        wrap.appendChild(fieldRow({
+            key: "fillerOn",
+            label: "Cut filler from each reply",
+            type: "bool",
+            hint: "Off by default. On, each new reply's sentences go to your Decision model in one call, which costs one Decision call per reply.",
+        }));
+        const under = [
+            {
+                key: "fillerAsk",
+                label: "Ask before cutting",
+                type: "bool",
+                needs: { key: "fillerOn" },
+                under: true,
+                hint: "Off by default. On, the cuts wait for your yes, the same way Ask before saving a refine does.",
+            },
+            {
+                key: "fillerOver",
+                int: true,
+                label: "Cut when it is at least this sure (%)",
+                type: "num",
+                min: 1,
+                max: 100,
+                needs: { key: "fillerOn" },
+                under: true,
+                hint: "90 by default. Lower cuts more sentences, and more of them by mistake.",
+            },
+            {
+                key: "fillerTalk",
+                label: "Leave dialogue alone",
+                type: "bool",
+                needs: { key: "fillerOn" },
+                under: true,
+                hint: "On by default. A sentence with dialogue in it is not sent or cut.",
+            },
+            {
+                key: "fillerCutMax",
+                int: true,
+                label: "Most of a reply it may take out (%)",
+                type: "num",
+                min: 1,
+                max: 100,
+                needs: { key: "fillerOn" },
+                under: true,
+                hint: "30 by default. The surest sentences go first. A reply is never emptied.",
+            },
+            {
+                key: "fillerCheck",
+                label: "What it asks about each sentence",
+                type: "lines",
+                rows: 5,
+                needs: { key: "fillerOn" },
+                under: true,
+                hint: "{{sentence}} is where each sentence goes. The whole reply is sent with it, named reply.",
+            },
+        ];
+        for (const f of under)
+            wrap.appendChild(fieldRow(f));
+        wrap.appendChild(builtInRow("fillerCheck", FILLER_CHECK, "What it asks about each sentence", "fillercheck", () => !!cfg.fillerOn));
+        const where = note("It asks through Which Decision connection, on the Model tab, or your default Decision connection. The Log shows each cut and how sure it was.");
+        where.setAttribute("data-arf-filler-where", "1");
+        wrap.appendChild(hangsOff(where, "fillerOn", "filler connection note"));
         return wrap;
     }
     // Word swaps: each one a box with what to find, what to put instead, and
@@ -18605,7 +18700,16 @@ export function setup(ctx, overrides) {
                         // happened to your writing and you can see that without opening it.
                         setBadge(String(undoHere().length || 1));
                         if (wasSwap) {
-                            log("refine", "swapped words in a reply, with no model call: " + (swapSaid || "nothing"), true);
+                            // Cut filler asks the Decision model, so the line only says no
+                            // model was called when there are no filler cuts in it.
+                            const list = Array.isArray(msg.swapped) ? msg.swapped.map((x) => String(x)) : [];
+                            const cuts = list.filter((x) => / cut as filler, \d+% sure$/.test(x)).length;
+                            const words = list.length - cuts;
+                            log("refine", (cuts
+                                ? words
+                                    ? "cut filler with the Decision model and swapped words in a reply: "
+                                    : "cut filler from a reply with the Decision model: "
+                                : "swapped words in a reply, with no model call: ") + (swapSaid || "nothing"), true);
                         }
                         else if (wasSnip) {
                             const gone = String(msg.before || "").length - String(msg.after || "").length;
@@ -19011,6 +19115,7 @@ export function setup(ctx, overrides) {
                             held: String(msg.held || ""),
                             kind: msg.kind === "swap" ? "swap" : "refine",
                             swapped: Array.isArray(msg.swapped) ? msg.swapped.map((x) => String(x)) : [],
+                            cuts: Number(msg.cuts) > 0 ? Number(msg.cuts) : 0,
                         };
                         setBadge("1");
                         log("answer", msg.kind === "swap" ? "word swaps are waiting for you" : "a refine is waiting for you", true);
@@ -19188,7 +19293,7 @@ export function setup(ctx, overrides) {
             return;
         showCard({
             key: "ask:" + undoKey(msg.chatId, msg.messageId),
-            title: pendingIsSwap(msg) ? "Save these word swaps?" : pendingHasSwaps(msg) ? "Save this refine and its word swaps?" : "Save this refine?",
+            title: pendingIsSwap(msg) ? "Save these " + swapWhat(msg) + "?" : pendingHasSwaps(msg) ? "Save this refine and its " + swapWhat(msg) + "?" : "Save this refine?",
             before: String(msg.before || ""),
             after: String(msg.after || ""),
             held: String(msg.held || ""),

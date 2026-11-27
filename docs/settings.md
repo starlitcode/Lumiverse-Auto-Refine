@@ -227,7 +227,14 @@ The same rules are used in Auto Retry and Auto Foley.
 
 - **Swap words in each reply** is off by default. On, each new reply and each refine gets the swaps under it. No model is asked, so it costs nothing.
   - **Ask before swapping** is under it, and off by default. On, a reply's swaps wait for your yes, the same way **Ask before saving a refine** holds a refine. A refine with swaps in it asks once for both. See [Asking first](swaps.md#asking-first).
-- **Add a swap** adds one. Each swap has **Find**, **Put instead** and **Keep the same pick in a chat**. **Delete** asks first.
+  - **Most of a reply a cut may take out (%)** is under it, 30 by default. It counts swaps that take out a whole sentence or the end of one. See [The limit](swaps.md#the-limit).
+- **Add a swap** adds one. Each swap has **Find**, **Put instead**, **What to take out** (shown while **Put instead** is empty), **Keep the same pick in a chat** and **Leave dialogue alone**. **Delete** asks first.
+
+**Cut filler.** See [Cut filler](filler.md).
+
+- **Cut filler from each reply** is off by default. On, each new reply's sentences go to your Decision model in one call, and the ones it is sure are filler are taken out. It costs one Decision call per reply.
+  - Under it: **Ask before cutting**, **Cut when it is at least this sure (%)**, **Leave dialogue alone**, **Most of a reply it may take out (%)** and **What it asks about each sentence**, with **Use the built-in text**. See [The settings](filler.md#the-settings).
+  - It asks through **Which Decision connection**, on the Model tab, or your default Decision connection.
 
 ## Log
 

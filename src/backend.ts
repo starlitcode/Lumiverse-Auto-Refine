@@ -6074,8 +6074,8 @@ async function refineRun(
   // The reader's word swaps, on the rewrite only. For a selection, only the
   // part that was rewritten.
   // Held back while a yes may be asked for, and kept below if none is.
-  const sw = await swapIn(back.text, chatId, userId, confirmBeforeSave || swapAsk);
-  const askFirst = confirmBeforeSave || (swapAsk && sw.swapped.length > 0);
+  const sw = await swapIn(back.text, chatId, userId, confirmBeforeSave || swapAsk || fillerAsk, !pickAt);
+  const askFirst = confirmBeforeSave || (swapAsk && sw.swapped.length > sw.cuts) || (fillerAsk && sw.cuts > 0);
   const whole =
     (pickAt
       ? split.head + split.body.slice(0, pickAt.start) + sw.text + split.body.slice(pickAt.end)
@@ -6102,6 +6102,7 @@ async function refineRun(
       kind: 'refine',
       // The word swaps in the rewrite, so the question can say it has them.
       swapped: sw.swapped.slice(0, 40),
+      cuts: sw.cuts,
     });
     return { ok: false, why: WHY_WAITING_YES, notes: notes };
   }
@@ -6671,6 +6672,160 @@ function swapWords(
   return { text: done, swapped: swapped, full: full, held: held };
 }
 
+// ---- cut filler ----
+// Cut filler asks the reader's Decision model about each sentence of a reply,
+// in one call, and takes out the sentences it is sure enough are filler. It
+// writes nothing of its own: a sentence is kept or taken out whole, the same
+// way a word swap takes out a whole sentence.
+let fillerOn = false;
+// How sure the Decision model must be, in percent, for a sentence to go.
+let fillerOver = 90;
+// The reader's own wording for the question. Null until the panel sends it,
+// which leaves FILLER_CHECK in use.
+let fillerCheck: string | null = null;
+// Sentences with dialogue in them are not asked about.
+let fillerTalk = true;
+// The most of a reply, in percent, Cut filler may take out.
+let fillerCutMax = 30;
+// Cut filler's cuts wait for a yes, the same way Ask before swapping holds
+// word swaps.
+let fillerAsk = false;
+// The sentences asked about in one call. Lumiverse takes up to 256
+// questions, and each one repeats its sentence, so a very long reply has its
+// first ones asked about and the Log says how many were left.
+const FILLER_SENTENCES_MAX = 120;
+// The question asked about each sentence when the reader has not written
+// their own. The same text as the panel's box. {{sentence}} is where each
+// sentence goes, in quotation marks. A question without it has the sentence
+// added on a line of its own at the end, so every sentence is still named.
+const FILLER_CHECK =
+  'This sentence from `reply` is filler: {{sentence}}\n' +
+  'Filler is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw, or a line that says again what `reply` already said. `reply` reads the same without it.';
+function fillerQuestion(check: string, sentence: string): string {
+  const quoted = JSON.stringify(sentence);
+  return check.indexOf('{{sentence}}') >= 0 ? check.split('{{sentence}}').join(quoted) : check + '\n' + quoted;
+}
+
+// The reasons Cut filler could not ask that each account was already warned of.
+const fillerTold = new Map<string, Set<string>>();
+
+// Word swaps or Cut filler, either of which runs on a new reply with no
+// refine.
+function cutsWanted(): boolean {
+  return (swapOn && swapList.length > 0) || fillerOn;
+}
+
+// Every sentence of a text, in order, each on its own line, without the
+// spaces at either end.
+function sentencesOf(text: string): Array<{ start: number; end: number }> {
+  const out: Array<{ start: number; end: number }> = [];
+  let at = 0;
+  while (at < text.length) {
+    while (at < text.length && /\s/.test(text[at])) at++;
+    if (at >= text.length) break;
+    const s = sentenceAt(text, at);
+    if (s.end <= at) {
+      at++;
+      continue;
+    }
+    if (s.end > s.start) out.push(s);
+    at = s.end;
+  }
+  return out;
+}
+
+// Cut filler on a whole reply. Answers with the reply as it is to be saved,
+// how many sentences went, and a line for each for the Log. Anything that
+// goes wrong leaves the reply as it was, and says why.
+async function fillerCut(text: string, userId: string | undefined): Promise<{ text: string; cuts: number; said: string[] }> {
+  const none = { text: text, cuts: 0, said: [] as string[] };
+  const trouble = (why: string) => {
+    say('warn', why);
+    // Each reason warns once for each account until Auto Refine restarts,
+    // since it would otherwise come with every reply.
+    const told = fillerTold.get(userKey(userId)) || new Set<string>();
+    if (!told.has(why)) {
+      told.add(why);
+      fillerTold.set(userKey(userId), told);
+      replyTo(userId, { type: 'swap_trouble', why: why });
+    }
+    return none;
+  };
+  if (!String(text).trim()) return none;
+  const masked = swapMask(String(text));
+  if (masked.full) return none;
+  const out0 = masked.text;
+  const asked: Array<{ start: number; end: number; id: string }> = [];
+  let left = 0;
+  for (const s of sentencesOf(out0)) {
+    const t = out0.slice(s.start, s.end);
+    // A sentence with code, a link or a tag in it, or with no words, is not
+    // asked about. Nor is one with dialogue, while Leave dialogue alone is on.
+    if (t.indexOf(SW_OPEN) >= 0 || !/[\p{L}\p{N}]/u.test(t)) continue;
+    if (fillerTalk && (TALK_MARKS.test(t) || inTalk(out0, s.start))) continue;
+    if (asked.length >= FILLER_SENTENCES_MAX) {
+      left++;
+      continue;
+    }
+    asked.push({ ...s, id: 's' + asked.length });
+  }
+  if (left) say('info', left + ' sentences at the end of a long reply were not asked about by Cut filler');
+  // One sentence is all a reply has, and it is never emptied.
+  if (asked.length < 2) return none;
+  const check = (fillerCheck == null ? FILLER_CHECK : fillerCheck).trim() || FILLER_CHECK;
+  const questions: Record<string, any> = {};
+  for (const a of asked)
+    questions[a.id] = {
+      type: NOUL,
+      instructions: fillerQuestion(check, swapUnmask(out0.slice(a.start, a.end), masked.parts)),
+    };
+  const got = await askJev(userId, { reply: String(text).slice(0, JEV_REPLY_MAX) }, questions);
+  if (got.error) return trouble('Cut filler could not ask the Decision model, so the reply was left as it was: ' + got.error);
+  const scored: Array<{ start: number; end: number; pct: number }> = [];
+  for (const a of asked) {
+    const ans = got.answers && got.answers[a.id];
+    const p = Number(ans && ans.noul);
+    if (!Number.isFinite(p)) continue;
+    const pct = Math.round(Math.max(0, Math.min(1, p)) * 100);
+    if (pct >= fillerOver) scored.push({ start: a.start, end: a.end, pct: pct });
+  }
+  if (!scored.length) {
+    say('info', 'Cut filler asked about ' + asked.length + ' sentences and found none at or over ' + fillerOver + '%');
+    return none;
+  }
+  // The surest go first, while they fit under the limit.
+  const budget = Math.floor((inkOf(String(text)) * fillerCutMax) / 100);
+  let spent = 0;
+  let held = 0;
+  const taken: Array<{ start: number; end: number; pct: number }> = [];
+  for (const c of scored.slice().sort((x, y) => y.pct - x.pct || x.start - y.start)) {
+    const r = wholeSentence(out0, c);
+    const cost = inkOf(out0.slice(r.start, r.end));
+    if (spent + cost > budget) {
+      held++;
+      continue;
+    }
+    spent += cost;
+    taken.push({ ...r, pct: c.pct });
+  }
+  if (!taken.length) {
+    say('info', 'Cut filler left ' + held + (held === 1 ? ' sentence' : ' sentences') + ' in, so that no more than ' + fillerCutMax + '% of the reply is taken out');
+    return none;
+  }
+  taken.sort((x, y) => x.start - y.start);
+  const said = taken.map(
+    (c) => '"' + swapUnmask(out0.slice(c.start, c.end), masked.parts).replace(/\s+/g, ' ').trim() + '" cut as filler, ' + c.pct + '% sure',
+  );
+  if (held)
+    said.push(held + (held === 1 ? ' more sentence was' : ' more sentences were') + ' left in, so that no more than ' + fillerCutMax + '% of the reply is taken out');
+  let out = out0;
+  for (const c of taken.slice().reverse()) out = cutOut(out, c.start, c.end);
+  const done = swapUnmask(out, masked.parts);
+  if (!/[\p{L}\p{N}]/u.test(done.replace(/<[^>]*>/g, ''))) return none;
+  if (got.cost) say('info', 'Cut filler cost ' + got.cost);
+  return { text: done, cuts: taken.length, said: said.slice(0, 40) };
+}
+
 // The picks made in each chat, kept on the account, so a name swapped in a
 // chat is swapped for the same name in every later reply of it.
 const SWAP_PICKS_FILE = 'swap-picks.json';
@@ -6747,9 +6902,20 @@ async function swapIn(
   chatId: string,
   userId: string | undefined,
   hold?: boolean,
-): Promise<{ text: string; swapped: string[]; picks: Record<string, string> }> {
+  whole = true,
+): Promise<{ text: string; swapped: string[]; picks: Record<string, string>; cuts: number }> {
   const made: Record<string, string> = {};
-  if (!swapOn || !swapList.length) return { text: text, swapped: [], picks: made };
+  // Cut filler goes first, on a whole reply only, since a part of one has
+  // too little around it for the Decision model to judge.
+  let cuts = 0;
+  let cutSaid: string[] = [];
+  if (fillerOn && whole) {
+    const f = await fillerCut(text, userId);
+    text = f.text;
+    cuts = f.cuts;
+    cutSaid = f.said;
+  }
+  if (!swapOn || !swapList.length) return { text: text, swapped: cutSaid, picks: made, cuts: cuts };
   const all = await readSwapPicks(userId);
   const chat = String(chatId);
   const pick = (rule: SwapRule, found: string): string => {
@@ -6787,7 +6953,7 @@ async function swapIn(
     replyTo(userId, { type: 'swap_trouble', why: why });
   }
   if (!hold) keepPicks(chat, userId, made, all);
-  return { text: done.text, swapped: done.swapped, picks: made };
+  return { text: done.text, swapped: cutSaid.concat(done.swapped).slice(0, 40), picks: made, cuts: cuts };
 }
 
 // New picks kept for a chat and saved to the account.
@@ -6825,7 +6991,7 @@ const heldWrites = new Map<string, { kind: 'refine' | 'swap'; swapped: string[] 
 // The swaps on a whole message, saved as their own write, for a reply no
 // refine wrote. Only the body: the thinking at either end is left as it is.
 async function swapMessage(chatId: string, messageId: any, userId?: string): Promise<RefineOutcome> {
-  if (!swapOn || !swapList.length) return { ok: false, why: '' };
+  if (!cutsWanted()) return { ok: false, why: '' };
   if (!masterOn || chatsOff.has(String(chatId))) return { ok: false, why: '' };
   let msgs: any[] = [];
   try {
@@ -6845,11 +7011,13 @@ async function swapMessage(chatId: string, messageId: any, userId?: string): Pro
   const original = String(m.content == null ? '' : m.content);
   const split = splitThinking(original);
   if (!split.body.trim()) return { ok: false, why: '' };
-  const sw = await swapIn(split.body, chatId, userId, swapAsk);
+  const hold = swapAsk || fillerAsk;
+  const sw = await swapIn(split.body, chatId, userId, hold);
   if (!sw.swapped.length) return { ok: false, why: '' };
   const next = split.head + sw.text + split.tail;
   if (next === original) return { ok: false, why: '' };
-  if (swapAsk) {
+  const swapsMade = sw.swapped.length > sw.cuts;
+  if ((swapAsk && swapsMade) || (fillerAsk && sw.cuts > 0)) {
     const k = key(chatId, m.id);
     heldPicks.delete(k);
     if (Object.keys(sw.picks).length) remember(heldPicks, k, sw.picks, HELD_PICKS_MAX);
@@ -6864,9 +7032,13 @@ async function swapMessage(chatId: string, messageId: any, userId?: string): Pro
       notes: '',
       kind: 'swap',
       swapped: sw.swapped.slice(0, 40),
+      // How many of those are Cut filler, so the question names what it holds.
+      cuts: sw.cuts,
     });
     return { ok: false, why: WHY_WAITING_YES };
   }
+  // Held for a yes that was not asked for, so they are kept now.
+  if (hold && Object.keys(sw.picks).length) keepPicks(String(chatId), userId, sw.picks);
   return saveRefined(chatId, m, original, next, userId, 'swap', undefined, sw.swapped);
 }
 
@@ -6875,7 +7047,7 @@ async function swapMessage(chatId: string, messageId: any, userId?: string): Pro
 // because the reply is being replaced, stopped or already holds its refine.
 async function swapAfter(done: RefineOutcome, chatId: string, messageId: any, userId?: string): Promise<void> {
   if (done.ok || done.stood || done.why === WHY_WAITING_YES) return;
-  if (!swapOn || !swapList.length || messageId == null) return;
+  if (!cutsWanted() || messageId == null) return;
   if (generating.has(String(chatId)) || retryPending(chatId)) return;
   try {
     await swapMessage(chatId, messageId, userId);
@@ -7667,6 +7839,14 @@ function applyRules(s: any): void {
   swapOn = s.swapOn === true;
   swapAsk = s.swapAsk === true;
   swapList = swapRulesFrom(s.swaps);
+  fillerOn = s.fillerOn === true;
+  fillerAsk = s.fillerAsk === true;
+  fillerTalk = s.fillerTalk !== false;
+  fillerCheck = typeof s.fillerCheck === 'string' ? s.fillerCheck.trim().slice(0, 1000) : null;
+  fillerOver = Number(s.fillerOver);
+  fillerOver = Number.isFinite(fillerOver) ? Math.max(1, Math.min(100, Math.round(fillerOver))) : 90;
+  fillerCutMax = Number(s.fillerCutMax);
+  fillerCutMax = Number.isFinite(fillerCutMax) ? Math.max(1, Math.min(100, Math.round(fillerCutMax))) : 30;
   swapCutMax = Number(s.swapCutMax);
   swapCutMax = Number.isFinite(swapCutMax) ? Math.max(1, Math.min(100, Math.round(swapCutMax))) : 30;
   wornOn = !!s.wornOn;
@@ -7732,9 +7912,9 @@ async function autoPass(p: any, who: any): Promise<void> {
   if (isImpersonation(p)) return;
   if (p.error) return stand('the reply itself failed, so there was nothing to refine');
   if (!masterOn) return stand('Auto Refine is switched off');
-  // With the automatic pass off, the word swaps still run on the reply, since
-  // they cost nothing. They go through the same checks below first.
-  const swapsOnly = !refineOn && swapOn && swapList.length > 0;
+  // With the automatic pass off, the word swaps and Cut filler still run on
+  // the reply. They go through the same checks below first.
+  const swapsOnly = !refineOn && cutsWanted();
   if (!refineOn && !swapsOnly) return stand('the automatic pass is switched off');
   if (!repliesOn) return stand('only your own messages are refined, as set in What to refine');
   if (chatsOff.has(String(p.chatId))) return stand('Auto Refine is switched off in this chat');

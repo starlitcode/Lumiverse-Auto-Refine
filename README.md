@@ -113,7 +113,8 @@ All four change only a line the model could quote as breaking a rule. The two fo
 - [Making your own prompt](docs/rules.md): a step-by-step guide to a prompt that fits your story and your model
 - [Presets](docs/prompt.md#presets) and [Import and export](docs/prompt.md#import-and-export)
 - [What it refuses to save](docs/guardrails.md): the checks on what comes back
-- [Word swaps](docs/swaps.md): words and phrases replaced in each reply, with no model call
+- [Word swaps](docs/swaps.md): words, phrases and sentences replaced or taken out in each reply, with no model call
+- [Cut filler](docs/filler.md): sentences your Decision model is sure are filler, taken out of each reply
 - [Two models](docs/two-models.md): a beta where a second model picks which replies to refine
 
 **About it**

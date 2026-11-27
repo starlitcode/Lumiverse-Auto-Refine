@@ -17000,6 +17000,97 @@ for (const [label, viewport, touch, zoom] of [
 // make the "?" find the outer row, and the description would open above that
 // whole block, far from the button. So every "?" on every tab finds a row
 // that holds no other "?".
+console.log("\nCut filler on the Limits tab");
+for (const [label, viewport, touch, zoom] of [
+  ["phone", { width: 390, height: 860 }, true, 1],
+  ["laptop", { width: 1280, height: 900 }, false, 1],
+  ["phone, zoom 1.25", { width: 390, height: 860 }, true, 1.25],
+  ["laptop, zoom 0.85", { width: 1280, height: 900 }, false, 0.85],
+]) {
+  await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page, errors) => {
+    await goTab(page, "Limits");
+    await settle(page);
+    const rows = ["fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck"];
+    const seen = async () => {
+      const out = {};
+      for (const k of rows) out[k] = await onScreen(page, k);
+      return out;
+    };
+    ok(label + ": the Cut filler card is on the Limits tab, with its switch", !!(await page.$("#drawer [data-arf-filler]")) && (await onScreen(page, "fillerOn")));
+    const off = await seen();
+    ok(label + ": its settings are hidden while the switch is off", Object.values(off).every((v) => !v), JSON.stringify(off));
+    // The switch opens them over several frames.
+    const heights = await page.evaluate(async () => {
+      const box = document.querySelector('#drawer [data-arf-field="fillerOn"]');
+      box.scrollIntoView({ block: "center" });
+      box.click();
+      const out = [];
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const row = document.querySelector('#drawer [data-arf-row="fillerCheck"]') || document.querySelector('#drawer [data-arf-field="fillerCheck"]');
+        out.push(row ? Math.round(row.getBoundingClientRect().height) : -1);
+      }
+      return out;
+    });
+    await page.waitForTimeout(400);
+    const steps = new Set(heights.filter((h) => h > 0)).size;
+    ok(label + ": turned on, its settings open over several frames", steps >= 3, heights.join(","));
+    const on = await seen();
+    ok(label + ": turned on, every one of its settings shows", Object.values(on).every((v) => v), JSON.stringify(on));
+    const vals = await page.evaluate(() => {
+      const f = (k) => document.querySelector('#drawer [data-arf-field="' + k + '"]');
+      return { over: f("fillerOver").value, max: f("fillerCutMax").value, talk: f("fillerTalk").checked, ask: f("fillerAsk").checked, check: f("fillerCheck").value };
+    });
+    ok(
+      label + ": it starts at 90% sure, 30% of a reply, dialogue left alone, and no asking first",
+      vals.over === "90" && vals.max === "30" && vals.talk === true && vals.ask === false,
+      JSON.stringify(vals),
+    );
+    ok(label + ": the question it sends is in the box, with {{sentence}} where each sentence goes", /^This sentence from `reply` is filler: \{\{sentence\}\}\n/.test(vals.check), vals.check.slice(0, 80));
+    const builtIn = await page.evaluate(() => {
+      const b = document.querySelector('#drawer [data-arf-fillercheck="builtin"]');
+      return !!b && !!b.offsetParent && /Use the built-in text/.test(b.textContent);
+    });
+    ok(label + ": Use the built-in text sits under the question", builtIn);
+    const saved = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
+    ok(label + ": the switch is saved", saved.fillerOn === true && saved.fillerOver === 90 && saved.fillerTalk === true, JSON.stringify({ on: saved.fillerOn, over: saved.fillerOver }));
+    // A number typed past its range is held to it when the box is left.
+    await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-field="fillerOver"]');
+      box.value = "250";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      box.dispatchEvent(new Event("blur"));
+    });
+    await settle(page);
+    await page.waitForTimeout(200);
+    const held = await page.evaluate(() => document.querySelector('#drawer [data-arf-field="fillerOver"]').value);
+    ok(label + ": a sureness over 100 is held to 100", held === "100", held);
+    // Fits, with tap targets big enough on a phone.
+    const look = await page.evaluate((touch) => {
+      const out = { sideways: document.documentElement.scrollWidth > innerWidth + 1, small: [], over: [] };
+      const card = document.querySelector("#drawer [data-arf-filler]");
+      const right = document.querySelector("#drawer").getBoundingClientRect().right;
+      for (const n of card.querySelectorAll("textarea, button, input, select")) {
+        const r = n.getBoundingClientRect();
+        if (!r.height) continue;
+        if (r.right > right + 1) out.over.push(n.tagName);
+        if (touch && n.type !== "checkbox" && n.offsetHeight < 32) out.small.push((n.textContent || n.tagName).slice(0, 20) + ":" + n.offsetHeight);
+      }
+      return out;
+    }, touch);
+    ok(label + ": nothing runs off the side", !look.sideways && !look.over.length, JSON.stringify(look));
+    if (touch) ok(label + ": every control is at least 32 pixels high", look.small.length === 0, JSON.stringify(look.small));
+    // Which Decision connection, on the Model tab, shows while Cut filler is
+    // on, with one model.
+    await goTab(page, "Model");
+    await settle(page);
+    await page.waitForTimeout(300);
+    ok(label + ": Which Decision connection shows on the Model tab while Cut filler is on", await onScreen(page, "judgeConnection"));
+    ok(label + ": no console errors", !errors.length, errors.slice(0, 2).join("; "));
+  });
+}
+
 console.log("\nevery description belongs to its own row");
 for (const [label, viewport, touch] of [["phone", { width: 390, height: 860 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
   await inTab(browser, { viewport, touch, saved: { enabled: true, swapOn: true, swaps: [{ find: "lantern", put: "candle", same: true }] } }, async (page, errors) => {
