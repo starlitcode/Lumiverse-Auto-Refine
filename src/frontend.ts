@@ -3343,6 +3343,10 @@ function refineIcon(): string {
 }
 
 export function setup(ctx: Ctx, overrides?: any) {
+  // How many leaves are running, and whether a paint waited for them. Set
+  // first, since anything can paint.
+  let leaving = 0;
+  let paintOwed = false;
   const disposers: Array<() => void> = [];
   // Set once this copy has been shut down. An update made while the page stays
   // open can leave a button of this copy on the page after that.
@@ -4589,11 +4593,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!mine) return;
     const box = mine.node || composer();
     if (box && setComposer(box, mine.before)) {
-      lastDraft = null;
-      unwatchDraft();
-      log("answer", "put your draft back", true);
-      toast("Your draft is back as it was.");
-    } else toast("Could not write to the input box.", true, "error");
+      // The card leaves first, and the panel changes after.
+      leaveThen(onTab("[data-arf-draft-undo]"), () => {
+        lastDraft = null;
+        unwatchDraft();
+        log("answer", "put your draft back", true);
+        toast("Your draft is back as it was.");
+        paintFloat();
+        paint();
+      });
+      return;
+    }
+    toast("Could not write to the input box.", true, "error");
     paintFloat();
     paint();
   }
@@ -8120,6 +8131,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function paint(was?: Map<string, boolean>) {
+    // A rebuild while something is leaving would take it away in one step,
+    // so it waits, and runs once when the last one has gone.
+    if (leaving > 0) {
+      paintOwed = true;
+      return;
+    }
     paints++;
     const from = was instanceof Map ? was : null;
     holdSide();
@@ -8202,14 +8219,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         markMovedSeen();
         persist(true);
         toast(moved.length === 1 ? "Taken the new default." : "Taken the new defaults.");
-        paint();
+        leaveThen(line, () => paint());
       });
       line.appendChild(take);
       const keep = button("Keep mine", false);
       keep.setAttribute("data-arf-moveddefault", "keep");
       keep.addEventListener("click", () => {
         markMovedSeen();
-        paint();
+        leaveThen(line, () => paint());
       });
       line.appendChild(keep);
       root.appendChild(line);
@@ -8618,6 +8635,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   function takePending(yes: boolean) {
     const one = pending;
     pending = null;
+    // The Waiting for you card leaves first. Nothing in between paints it
+    // again, since pending is already empty.
+    // The answer goes at once. The panel is painted again once the card has
+    // left.
+    const asking = onTab("[data-arf-pending-kind]");
+    if (asking) leaveThen(asking, () => {});
+    answerPending(one, yes);
+  }
+  function answerPending(one: typeof pending, yes: boolean) {
     // The question on screen is the same one, answered.
     if (popEl && popKey.indexOf("ask:") === 0) dropPop();
     if (!undoHere().length) setBadge(null);
@@ -8684,11 +8710,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       list.length > 1 ? String(list.length) : undefined,
     );
     wrap.setAttribute("data-arf-last", "1");
+    // What leaves when a refine is put back or dismissed: the whole card for
+    // the only one, and its own row or fold otherwise.
+    if (list.length === 1) wrap.setAttribute("data-arf-undo-row", undoKey(list[0].chatId, list[0].messageId));
 
     // The newest is open. The rest go in one fold, each in a fold of its own
     // named by its time and first words, so the card stays one refine tall
     // until you ask for more.
-    wrap.appendChild(buildUndoRow(list[0]));
+    const top = buildUndoRow(list[0]);
+    if (list.length > 1) top.setAttribute("data-arf-undo-row", undoKey(list[0].chatId, list[0].messageId));
+    wrap.appendChild(top);
     if (list.length > 1)
       wrap.appendChild(
         fold("Older refines", (outer) => {
@@ -8701,11 +8732,11 @@ export function setup(ctx: Ctx, overrides?: any) {
             const reply = held.trim() && one.after.indexOf(held) === 0 ? one.after.slice(held.length) : one.after;
             const first = forReading(reply).replace(/\s+/g, " ").trim();
             const words = first.length > 48 ? first.slice(0, 48).trim() + "..." : first;
-            outer.appendChild(
-              fold(new Date(one.at).toTimeString().slice(0, 5) + ": " + words, (body) => {
-                body.appendChild(buildUndoRow(one));
-              }),
-            );
+            const older = fold(new Date(one.at).toTimeString().slice(0, 5) + ": " + words, (body) => {
+              body.appendChild(buildUndoRow(one));
+            });
+            older.setAttribute("data-arf-undo-row", undoKey(one.chatId, one.messageId));
+            outer.appendChild(older);
           }
         }),
       );
@@ -9086,10 +9117,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     back.addEventListener("click", () => putDraftBack());
     const seen = button("Dismiss", false);
     seen.addEventListener("click", () => {
-      lastDraft = null;
-      unwatchDraft();
-      paintFloat();
-      paint();
+      leaveThen(onTab("[data-arf-draft-undo]"), () => {
+        lastDraft = null;
+        unwatchDraft();
+        paintFloat();
+        paint();
+      });
     });
     const big = button("Read it in full", false);
     big.addEventListener("click", () =>
@@ -9111,15 +9144,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.appendChild(diffWell(one.before, one.after, one.held));
     const row = el("div", "arf-row");
     const back = button("Put it back", false);
+    back.setAttribute("data-arf-undo", "back");
     back.addEventListener("click", () => {
       askUndo(one.chatId, one.messageId);
     });
     const seen = button("Dismiss", false);
+    seen.setAttribute("data-arf-undo", "dismiss");
     seen.addEventListener("click", () => {
-      undoable.delete(undoKey(one.chatId, one.messageId));
-      forgetUndo([one]);
-      if (!undoHere().length) setBadge(null);
-      paint();
+      const k = undoKey(one.chatId, one.messageId);
+      leaveThen(onTab('[data-arf-undo-row="' + k + '"]'), () => {
+        undoable.delete(k);
+        forgetUndo([one]);
+        if (!undoHere().length) setBadge(null);
+        paint();
+      });
     });
     // The before and after at the size of the screen.
     const big = button("Expand", false);
@@ -9385,6 +9423,34 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A box let down to nothing and then handed over. done runs once, whether the
   // travel finished, was cut short by a second one, or never started because the
   // reader asked for no movement.
+  // Anything taken off the panel leaves through here: it fades, slides 4px
+  // and its space closes over several frames, so what is under it moves up
+  // with it. With Reduce motion it goes at once. done runs once, after every
+  // node has gone, and at once when there is nothing on screen to move.
+  function leaveThen(nodes: any, done: () => void) {
+    const list = (Array.isArray(nodes) ? nodes : [nodes]).filter((n: any) => n && n.isConnected);
+    if (!list.length) return done();
+    let left = list.length;
+    leaving++;
+    for (const n of list)
+      foldAway(n, () => {
+        left--;
+        if (left > 0) return;
+        leaving--;
+        done();
+        if (leaving === 0 && paintOwed) {
+          paintOwed = false;
+          paint();
+        }
+      });
+  }
+
+  // A row on the tab found by its mark, or null.
+  const onTab = (sel: string): HTMLElement | null =>
+    tab && tab.root ? ((tab.root as HTMLElement).querySelector(sel) as HTMLElement | null) : null;
+  const allOnTab = (sel: string): HTMLElement[] =>
+    tab && tab.root ? (Array.from((tab.root as HTMLElement).querySelectorAll(sel)) as HTMLElement[]) : [];
+
   function foldAway(node: any, done: () => void) {
     let ran = false;
     const token = {};
@@ -10459,7 +10525,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       gotIt.setAttribute("data-arf-builtinmoved", "dismiss");
       gotIt.addEventListener("click", () => {
         markBuiltInSeen();
-        paint();
+        leaveThen(moved, () => paint());
       });
       moved.appendChild(gotIt);
       wrap.appendChild(moved);
@@ -12445,9 +12511,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const rowB = el("div", "arf-row");
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
-      jevLast = null;
-      jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
-      paint();
+      // Everything under the card's heading leaves, then the card says
+      // there is nothing yet.
+      leaveThen(Array.from(wrap.children).filter((c: any) => !c.classList.contains("arf-cardh")), () => {
+        jevLast = null;
+        jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
+        paint();
+      });
     });
     rowB.appendChild(clear);
     wrap.appendChild(rowB);
@@ -12506,8 +12576,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
-      keptNotes = null;
-      paint();
+      leaveThen(Array.from(wrap.children).filter((c: any) => !c.classList.contains("arf-cardh")), () => {
+        keptNotes = null;
+        paint();
+      });
     });
     row.appendChild(copy);
     row.appendChild(big);
@@ -12573,6 +12645,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const clear = button("Clear the log", false);
     clear.className += " arf-danger";
     clear.addEventListener("click", () => {
+      leaveThen(allOnTab("[data-arf-logline]").filter((n) => !n.hidden), clearTheLog);
+    });
+    const clearTheLog = () => {
       activity.length = 0;
       drops.clear();
       tally.saved = 0;
@@ -12581,7 +12656,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       lastRun = null;
       log("setup", "cleared the log", true);
       paint();
-    });
+    };
     row.appendChild(copy);
     row.appendChild(read);
     row.appendChild(clear);
@@ -19125,6 +19200,10 @@ export function setup(ctx: Ctx, overrides?: any) {
               undoAsked.get(String(msg.requestId)) ||
               (msg.messageId != null ? { chatId: msg.chatId, messageId: msg.messageId } : null);
             undoAsked.delete(String(msg.requestId));
+            // A row that goes leaves first, and the panel changes after, since
+            // anything that paints would take the row away in one step.
+            const goes = !!about && (msg.ok || !!msg.gone);
+            leaveThen(goes ? onTab('[data-arf-undo-row="' + undoKey(about!.chatId, about!.messageId) + '"]') : null, () => {
             if (msg.ok) {
               if (about) undoable.delete(undoKey(about.chatId, about.messageId));
               // The card on the page is about this refine, and this refine is
@@ -19151,6 +19230,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               }
             }
             paint();
+            });
             return;
           }
           if (msg.type === "confirm_refine") {

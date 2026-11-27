@@ -11073,7 +11073,8 @@ console.log("\nsaying the built-in prompts have changed");
 
     const after = await page.evaluate(async () => {
       document.querySelector('#drawer [data-arf-builtinmoved="dismiss"]').click();
-      await new Promise((r) => setTimeout(r, 120));
+      // The line leaves over a few frames.
+      await new Promise((r) => setTimeout(r, 450));
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
         gone: !document.querySelector("#drawer [data-arf-builtinmoved]"),
@@ -16886,6 +16887,8 @@ for (const [label, viewport, touch, zoom] of [
       window.__sentBefore = window.__sent.length;
     });
     await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="accept"]').click());
+    // The card leaves over a few frames before the panel is drawn again.
+    await page.waitForTimeout(400);
     await settle(page);
     const applied = await page.evaluate(() => window.__sent.slice(window.__sentBefore).filter((m) => m.type === "apply_refine"));
     ok(label + ": Accept it saves the swaps", applied.length === 1 && applied[0].after === "Brindle waved." && applied[0].before === "Elara waved.", JSON.stringify(applied));
@@ -16896,6 +16899,7 @@ for (const [label, viewport, touch, zoom] of [
       window.__toasts = [];
     });
     await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
+    await page.waitForTimeout(400);
     await settle(page);
     const declined = await page.evaluate(() => ({
       applied: window.__sent.slice(window.__sentBefore).filter((m) => m.type === "apply_refine").length,
@@ -17039,6 +17043,207 @@ for (const [label, viewport, touch, full] of [["laptop", { width: 1280, height: 
     }
     ok(label + ": no errors", errors.length === 0, errors.join(" | "));
   });
+}
+
+// Anything taken off the panel leaves smoothly: it fades, slides 4px and its
+// space closes over several frames, so what is under it moves up with it.
+// With Reduce motion it goes in one step. Each kind of list is recorded frame
+// by frame while one of its rows is taken off.
+console.log("\nanything taken off the panel leaves smoothly");
+{
+  // Started before the press: each frame, the height and opacity of what is
+  // leaving, and where the first thing under it sits.
+  const record = (page, sel, press) =>
+    page.evaluate(async ([sel, press]) => {
+      const target = document.querySelector(sel);
+      if (!target) return { missing: sel };
+      const next = (() => {
+        let n = target;
+        while (n) {
+          let s = n.nextElementSibling;
+          while (s) {
+            if (!s.hidden && s.getClientRects().length && s.getBoundingClientRect().height > 0) return s;
+            s = s.nextElementSibling;
+          }
+          n = n.parentElement;
+          if (!n || n.id === "drawer") return null;
+        }
+        return null;
+      })();
+      const frames = [];
+      const read = () => {
+        const on = target.isConnected && target.getClientRects().length;
+        frames.push({
+          h: on ? Math.round(target.getBoundingClientRect().height * 10) / 10 : 0,
+          o: on ? Number(getComputedStyle(target).opacity) : 0,
+          // From the top of what is leaving to the top of what is under it,
+          // so a page that is pulled back as it gets shorter is not counted
+          // as the row moving.
+          y: next && next.isConnected && on ? Math.round((next.getBoundingClientRect().top - target.getBoundingClientRect().top) * 10) / 10 : null,
+        });
+      };
+      read();
+      // The press, by the code the button runs.
+      const b = document.querySelector(press);
+      if (!b) return { missing: press };
+      b.click();
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        read();
+      }
+      return { frames };
+    }, [sel, press]);
+  const judge = (label, out, still) => {
+    if (out.missing) return ok(label + ": the row to take off is there", false, out.missing);
+    const f = out.frames;
+    const start = f[0].h;
+    const between = f.filter((x) => x.h > 1 && x.h < start - 1).length;
+    const faded = f.filter((x) => x.o > 0.02 && x.o < 0.98).length;
+    const ys = f.map((x) => x.y).filter((y) => y != null);
+    const moves = [];
+    for (let i = 1; i < ys.length; i++) moves.push(ys[i - 1] - ys[i]);
+    const travel = ys.length ? ys[0] - Math.min(...ys) : 0;
+    const biggest = moves.length ? Math.max(...moves) : 0;
+    const stepsMoved = moves.filter((m) => m > 0.5).length;
+    if (still) {
+      ok(label + ", Reduce motion: it goes in one step", between <= 1 && faded <= 1, JSON.stringify(f.slice(0, 6)));
+      return;
+    }
+    ok(label + ": its space closes over several frames", between >= 3, JSON.stringify(f.map((x) => x.h)));
+    ok(label + ": it fades over several frames", faded >= 3, JSON.stringify(f.map((x) => x.o)));
+    ok(label + ": what is under it moves up with it, a little at a time",
+      travel < 2 || (stepsMoved >= 3 && biggest <= travel * 0.5 + 1), "travel " + travel + ", biggest step " + biggest + ", steps " + stepsMoved);
+  };
+  const reply = (page, id, at) =>
+    page.evaluate(([id, at]) => {
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      window.__fromBackend({ type: "refined", chatId: "c1", messageId: id, before: "The lamp was out when they came in. " + id, after: "The lamp was out. " + id, held: "", canUndo: true, kind: "refine", swiped: false });
+    }, [id, at]);
+  const KINDS = [
+    {
+      name: "a refine dismissed, the only one",
+      saved: { enabled: true, popup: false },
+      set: async (page) => { await reply(page, "m1"); },
+      sel: "#drawer [data-arf-undo-row]",
+      press: '#drawer [data-arf-undo-row] [data-arf-undo="dismiss"]',
+    },
+    {
+      name: "a refine dismissed, with older ones under it",
+      saved: { enabled: true, popup: false },
+      set: async (page) => { await reply(page, "m1"); await settle(page); await reply(page, "m2"); },
+      sel: '#drawer [data-arf-undo-row="c1:m2"]',
+      press: '#drawer [data-arf-undo-row="c1:m2"] [data-arf-undo="dismiss"]',
+    },
+    {
+      name: "a refine put back",
+      saved: { enabled: true, popup: false },
+      set: async (page) => { await reply(page, "m1"); },
+      sel: "#drawer [data-arf-undo-row]",
+      // Put back, answered the way the backend answers once it is done.
+      press: '#drawer [data-arf-undo-row] [data-arf-undo="back"]',
+      after: async (page) => page.evaluate(() => {
+        const ask = window.__sent.filter((m) => m.type === "undo_refine").pop();
+        if (ask) window.__fromBackend({ type: "undo_result", requestId: ask.requestId, chatId: "c1", messageId: "m1", ok: true });
+      }),
+    },
+    {
+      name: "a question turned down",
+      saved: { enabled: true, popup: false },
+      set: async (page) => page.evaluate(() => {
+        for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+        window.__fromBackend({ type: "confirm_refine", chatId: "c1", messageId: "m3", before: "The door stuck.", after: "The door held.", held: "", notes: "" });
+      }),
+      sel: "#drawer [data-arf-pending-kind]",
+      press: '#drawer [data-arf-pending="decline"]',
+    },
+    {
+      name: "a Log cleared",
+      saved: { enabled: true },
+      tab: "Log",
+      set: async (page) => page.evaluate(() => {
+        window.__fromBackend({ type: "refine_notes", chatId: "c1", messageId: "m1", notes: "Cut two adverbs." });
+      }),
+      sel: "#drawer [data-arf-logline]",
+      press: "#drawer .arf-danger",
+    },
+    {
+      name: "a notice dismissed",
+      saved: { enabled: true, builtInSeen: "notthemark" },
+      tab: "Prompt",
+      set: async () => {},
+      sel: "#drawer [data-arf-builtinmoved]",
+      press: '#drawer [data-arf-builtinmoved="dismiss"]',
+    },
+    {
+      name: "a word swap deleted",
+      saved: { enabled: true, swapOn: true, swaps: [{ find: "jolt", put: "shiver", same: true }, { find: "Elara", put: "Brindle", same: true }] },
+      tab: "Limits",
+      // Asked first: in Lumiverse's dialog, or by pressing again when the page
+      // scrolls. The first press is made here, so the recorded one deletes.
+      set: async (page) => page.evaluate(() => { window.__confirmSay = true; }),
+      arm: true,
+      sel: "#drawer [data-arf-swap]",
+      press: "#drawer [data-arf-swap] [data-arf-swap-delete]",
+    },
+  ];
+  const SIZES = [
+    ["phone", { width: 390, height: 860 }, true, 1],
+    ["phone, zoom 1.25", { width: 390, height: 860 }, true, 1.25],
+    ["phone, zoom 0.85", { width: 390, height: 860 }, true, 0.85],
+    ["laptop", { width: 1280, height: 900 }, false, 1],
+    ["laptop, zoom 1.25", { width: 1280, height: 900 }, false, 1.25],
+    ["laptop, zoom 0.85", { width: 1280, height: 900 }, false, 0.85],
+  ];
+  for (const k of KINDS) {
+    for (const [size, viewport, touch, zoom] of SIZES.concat([["phone, Reduce motion", { width: 390, height: 860 }, true, 1, true]])) {
+      const still = size.indexOf("Reduce motion") >= 0;
+      await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: Object.assign({}, k.saved, still ? { reduceMotion: true } : {}) }, async (page, errors) => {
+        await k.set(page);
+        await settle(page);
+        if (k.tab) await goTab(page, k.tab);
+        await settle(page);
+        await page.evaluate((sel) => { const n = document.querySelector(sel); if (n) n.scrollIntoView({ block: "start" }); }, k.sel);
+        await settle(page);
+        if (k.arm) {
+          await page.evaluate((press) => document.querySelector(press).click(), k.press);
+          await page.waitForTimeout(500);
+          await settle(page);
+        }
+        let out;
+        if (k.after) {
+          // The press asks the backend, and the row leaves when it answers.
+          await page.evaluate((press) => document.querySelector(press) && document.querySelector(press).click(), k.press);
+          await settle(page);
+          out = await page.evaluate(async (sel) => {
+            const target = document.querySelector(sel);
+            return target ? true : false;
+          }, k.sel);
+          out = await (async () => {
+            const res = page.evaluate(async (sel) => {
+              const target = document.querySelector(sel);
+              if (!target) return { missing: sel };
+              const frames = [];
+              const read = () => {
+                const on = target.isConnected && target.getClientRects().length;
+                frames.push({ h: on ? Math.round(target.getBoundingClientRect().height * 10) / 10 : 0, o: on ? Number(getComputedStyle(target).opacity) : 0, y: null });
+              };
+              read();
+              const ask = window.__sent.filter((m) => m.type === "undo_refine").pop();
+              if (ask) window.__fromBackend({ type: "undo_result", requestId: ask.requestId, chatId: "c1", messageId: "m1", ok: true });
+              for (let i = 0; i < 40; i++) {
+                await new Promise((r) => requestAnimationFrame(r));
+                read();
+              }
+              return { frames };
+            }, k.sel);
+            return res;
+          })();
+        } else out = await record(page, k.sel, k.press);
+        judge(k.name + ", " + size, out, still);
+        ok(k.name + ", " + size + ": no errors", errors.length === 0, errors.join(" | "));
+      });
+    }
+  }
 }
 
 await browser.close();

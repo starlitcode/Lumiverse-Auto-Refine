@@ -3123,6 +3123,10 @@ function refineIcon() {
     return eyeIcon();
 }
 export function setup(ctx, overrides) {
+    // How many leaves are running, and whether a paint waited for them. Set
+    // first, since anything can paint.
+    let leaving = 0;
+    let paintOwed = false;
     const disposers = [];
     // Set once this copy has been shut down. An update made while the page stays
     // open can leave a button of this copy on the page after that.
@@ -4436,13 +4440,18 @@ export function setup(ctx, overrides) {
             return;
         const box = mine.node || composer();
         if (box && setComposer(box, mine.before)) {
-            lastDraft = null;
-            unwatchDraft();
-            log("answer", "put your draft back", true);
-            toast("Your draft is back as it was.");
+            // The card leaves first, and the panel changes after.
+            leaveThen(onTab("[data-arf-draft-undo]"), () => {
+                lastDraft = null;
+                unwatchDraft();
+                log("answer", "put your draft back", true);
+                toast("Your draft is back as it was.");
+                paintFloat();
+                paint();
+            });
+            return;
         }
-        else
-            toast("Could not write to the input box.", true, "error");
+        toast("Could not write to the input box.", true, "error");
         paintFloat();
         paint();
     }
@@ -8009,6 +8018,12 @@ export function setup(ctx, overrides) {
             el.style.setProperty("--arf-box-layer", boxLayer(v));
     }
     function paint(was) {
+        // A rebuild while something is leaving would take it away in one step,
+        // so it waits, and runs once when the last one has gone.
+        if (leaving > 0) {
+            paintOwed = true;
+            return;
+        }
         paints++;
         const from = was instanceof Map ? was : null;
         holdSide();
@@ -8089,14 +8104,14 @@ export function setup(ctx, overrides) {
                 markMovedSeen();
                 persist(true);
                 toast(moved.length === 1 ? "Taken the new default." : "Taken the new defaults.");
-                paint();
+                leaveThen(line, () => paint());
             });
             line.appendChild(take);
             const keep = button("Keep mine", false);
             keep.setAttribute("data-arf-moveddefault", "keep");
             keep.addEventListener("click", () => {
                 markMovedSeen();
-                paint();
+                leaveThen(line, () => paint());
             });
             line.appendChild(keep);
             root.appendChild(line);
@@ -8490,6 +8505,16 @@ export function setup(ctx, overrides) {
     function takePending(yes) {
         const one = pending;
         pending = null;
+        // The Waiting for you card leaves first. Nothing in between paints it
+        // again, since pending is already empty.
+        // The answer goes at once. The panel is painted again once the card has
+        // left.
+        const asking = onTab("[data-arf-pending-kind]");
+        if (asking)
+            leaveThen(asking, () => { });
+        answerPending(one, yes);
+    }
+    function answerPending(one, yes) {
         // The question on screen is the same one, answered.
         if (popEl && popKey.indexOf("ask:") === 0)
             dropPop();
@@ -8545,10 +8570,17 @@ export function setup(ctx, overrides) {
     function buildLastRefine(list) {
         const wrap = card(list.length === 1 ? "The last refine" : "Refines you can put back", undefined, list.length > 1 ? String(list.length) : undefined);
         wrap.setAttribute("data-arf-last", "1");
+        // What leaves when a refine is put back or dismissed: the whole card for
+        // the only one, and its own row or fold otherwise.
+        if (list.length === 1)
+            wrap.setAttribute("data-arf-undo-row", undoKey(list[0].chatId, list[0].messageId));
         // The newest is open. The rest go in one fold, each in a fold of its own
         // named by its time and first words, so the card stays one refine tall
         // until you ask for more.
-        wrap.appendChild(buildUndoRow(list[0]));
+        const top = buildUndoRow(list[0]);
+        if (list.length > 1)
+            top.setAttribute("data-arf-undo-row", undoKey(list[0].chatId, list[0].messageId));
+        wrap.appendChild(top);
         if (list.length > 1)
             wrap.appendChild(fold("Older refines", (outer) => {
                 outer.appendChild(note("The last " + UNDO_PER_CHAT + " refines in a chat are kept here. The oldest goes when a new one comes in."));
@@ -8560,9 +8592,11 @@ export function setup(ctx, overrides) {
                     const reply = held.trim() && one.after.indexOf(held) === 0 ? one.after.slice(held.length) : one.after;
                     const first = forReading(reply).replace(/\s+/g, " ").trim();
                     const words = first.length > 48 ? first.slice(0, 48).trim() + "..." : first;
-                    outer.appendChild(fold(new Date(one.at).toTimeString().slice(0, 5) + ": " + words, (body) => {
+                    const older = fold(new Date(one.at).toTimeString().slice(0, 5) + ": " + words, (body) => {
                         body.appendChild(buildUndoRow(one));
-                    }));
+                    });
+                    older.setAttribute("data-arf-undo-row", undoKey(one.chatId, one.messageId));
+                    outer.appendChild(older);
                 }
             }));
         // What a reload and an update do to this list, so nobody finds it empty
@@ -8938,10 +8972,12 @@ export function setup(ctx, overrides) {
         back.addEventListener("click", () => putDraftBack());
         const seen = button("Dismiss", false);
         seen.addEventListener("click", () => {
-            lastDraft = null;
-            unwatchDraft();
-            paintFloat();
-            paint();
+            leaveThen(onTab("[data-arf-draft-undo]"), () => {
+                lastDraft = null;
+                unwatchDraft();
+                paintFloat();
+                paint();
+            });
         });
         const big = button("Read it in full", false);
         big.addEventListener("click", () => openBig("Both versions", "As you wrote it\n\n" + one.before + "\n\n---\n\nAfter the refine\n\n" + one.after));
@@ -8957,16 +8993,21 @@ export function setup(ctx, overrides) {
         box.appendChild(diffWell(one.before, one.after, one.held));
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
+        back.setAttribute("data-arf-undo", "back");
         back.addEventListener("click", () => {
             askUndo(one.chatId, one.messageId);
         });
         const seen = button("Dismiss", false);
+        seen.setAttribute("data-arf-undo", "dismiss");
         seen.addEventListener("click", () => {
-            undoable.delete(undoKey(one.chatId, one.messageId));
-            forgetUndo([one]);
-            if (!undoHere().length)
-                setBadge(null);
-            paint();
+            const k = undoKey(one.chatId, one.messageId);
+            leaveThen(onTab('[data-arf-undo-row="' + k + '"]'), () => {
+                undoable.delete(k);
+                forgetUndo([one]);
+                if (!undoHere().length)
+                    setBadge(null);
+                paint();
+            });
         });
         // The before and after at the size of the screen.
         const big = button("Expand", false);
@@ -9245,6 +9286,32 @@ export function setup(ctx, overrides) {
     // A box let down to nothing and then handed over. done runs once, whether the
     // travel finished, was cut short by a second one, or never started because the
     // reader asked for no movement.
+    // Anything taken off the panel leaves through here: it fades, slides 4px
+    // and its space closes over several frames, so what is under it moves up
+    // with it. With Reduce motion it goes at once. done runs once, after every
+    // node has gone, and at once when there is nothing on screen to move.
+    function leaveThen(nodes, done) {
+        const list = (Array.isArray(nodes) ? nodes : [nodes]).filter((n) => n && n.isConnected);
+        if (!list.length)
+            return done();
+        let left = list.length;
+        leaving++;
+        for (const n of list)
+            foldAway(n, () => {
+                left--;
+                if (left > 0)
+                    return;
+                leaving--;
+                done();
+                if (leaving === 0 && paintOwed) {
+                    paintOwed = false;
+                    paint();
+                }
+            });
+    }
+    // A row on the tab found by its mark, or null.
+    const onTab = (sel) => tab && tab.root ? tab.root.querySelector(sel) : null;
+    const allOnTab = (sel) => tab && tab.root ? Array.from(tab.root.querySelectorAll(sel)) : [];
     function foldAway(node, done) {
         let ran = false;
         const token = {};
@@ -10301,7 +10368,7 @@ export function setup(ctx, overrides) {
             gotIt.setAttribute("data-arf-builtinmoved", "dismiss");
             gotIt.addEventListener("click", () => {
                 markBuiltInSeen();
-                paint();
+                leaveThen(moved, () => paint());
             });
             moved.appendChild(gotIt);
             wrap.appendChild(moved);
@@ -12025,9 +12092,13 @@ export function setup(ctx, overrides) {
         const rowB = el("div", "arf-row");
         const clear = button("Clear", false);
         clear.addEventListener("click", () => {
-            jevLast = null;
-            jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
-            paint();
+            // Everything under the card's heading leaves, then the card says
+            // there is nothing yet.
+            leaveThen(Array.from(wrap.children).filter((c) => !c.classList.contains("arf-cardh")), () => {
+                jevLast = null;
+                jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
+                paint();
+            });
         });
         rowB.appendChild(clear);
         wrap.appendChild(rowB);
@@ -12073,8 +12144,10 @@ export function setup(ctx, overrides) {
         });
         const clear = button("Clear", false);
         clear.addEventListener("click", () => {
-            keptNotes = null;
-            paint();
+            leaveThen(Array.from(wrap.children).filter((c) => !c.classList.contains("arf-cardh")), () => {
+                keptNotes = null;
+                paint();
+            });
         });
         row.appendChild(copy);
         row.appendChild(big);
@@ -12129,6 +12202,9 @@ export function setup(ctx, overrides) {
         const clear = button("Clear the log", false);
         clear.className += " arf-danger";
         clear.addEventListener("click", () => {
+            leaveThen(allOnTab("[data-arf-logline]").filter((n) => !n.hidden), clearTheLog);
+        });
+        const clearTheLog = () => {
             activity.length = 0;
             drops.clear();
             tally.saved = 0;
@@ -12137,7 +12213,7 @@ export function setup(ctx, overrides) {
             lastRun = null;
             log("setup", "cleared the log", true);
             paint();
-        });
+        };
         row.appendChild(copy);
         row.appendChild(read);
         row.appendChild(clear);
@@ -18763,38 +18839,43 @@ export function setup(ctx, overrides) {
                         const about = undoAsked.get(String(msg.requestId)) ||
                             (msg.messageId != null ? { chatId: msg.chatId, messageId: msg.messageId } : null);
                         undoAsked.delete(String(msg.requestId));
-                        if (msg.ok) {
-                            if (about)
-                                undoable.delete(undoKey(about.chatId, about.messageId));
-                            // The card on the page is about this refine, and this refine is
-                            // gone. Closed whichever way the undo was asked for, so putting
-                            // one back from the Log does not leave the card offering to do
-                            // it again.
-                            if (about && popKey === undoKey(about.chatId, about.messageId))
-                                dropPop();
-                            if (!undoHere().length)
-                                setBadge(null);
-                            tally.undone++;
-                            log("answer", "put a reply back the way it was", true);
-                            toast("Put back.", true, "success");
-                        }
-                        else {
-                            const why = String(msg.why || "no reason given");
-                            log("problem", "could not put it back: " + why);
-                            // Nothing to try again. The message was deleted, or swiped or
-                            // edited since the refine, so the text this was holding does not
-                            // belong in it any more. The row goes rather than staying on the
-                            // tab offering a button that cannot work.
-                            if (msg.gone && about) {
-                                undoable.delete(undoKey(about.chatId, about.messageId));
-                                if (popKey === undoKey(about.chatId, about.messageId))
+                        // A row that goes leaves first, and the panel changes after, since
+                        // anything that paints would take the row away in one step.
+                        const goes = !!about && (msg.ok || !!msg.gone);
+                        leaveThen(goes ? onTab('[data-arf-undo-row="' + undoKey(about.chatId, about.messageId) + '"]') : null, () => {
+                            if (msg.ok) {
+                                if (about)
+                                    undoable.delete(undoKey(about.chatId, about.messageId));
+                                // The card on the page is about this refine, and this refine is
+                                // gone. Closed whichever way the undo was asked for, so putting
+                                // one back from the Log does not leave the card offering to do
+                                // it again.
+                                if (about && popKey === undoKey(about.chatId, about.messageId))
                                     dropPop();
                                 if (!undoHere().length)
                                     setBadge(null);
-                                toast("That reply has moved on, so there is nothing to put back.", true, "warning");
+                                tally.undone++;
+                                log("answer", "put a reply back the way it was", true);
+                                toast("Put back.", true, "success");
                             }
-                        }
-                        paint();
+                            else {
+                                const why = String(msg.why || "no reason given");
+                                log("problem", "could not put it back: " + why);
+                                // Nothing to try again. The message was deleted, or swiped or
+                                // edited since the refine, so the text this was holding does not
+                                // belong in it any more. The row goes rather than staying on the
+                                // tab offering a button that cannot work.
+                                if (msg.gone && about) {
+                                    undoable.delete(undoKey(about.chatId, about.messageId));
+                                    if (popKey === undoKey(about.chatId, about.messageId))
+                                        dropPop();
+                                    if (!undoHere().length)
+                                        setBadge(null);
+                                    toast("That reply has moved on, so there is nothing to put back.", true, "warning");
+                                }
+                            }
+                            paint();
+                        });
                         return;
                     }
                     if (msg.type === "confirm_refine") {

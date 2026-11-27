@@ -22,6 +22,7 @@ _2026-11-26_
 
 ### Fixed
 
+- **Things taken off the panel leave smoothly.** Dismissing or putting back a refine, turning down a refine that is waiting for you, clearing the Log or a result card, and dismissing a notice took the row away between two frames, and everything under it jumped up. Now it fades, slides up 4 pixels and its space closes over several frames, so what is under it moves up with it. With Reduce motion on, it goes at once.
 - **Replies you can put back are no longer lost when your account cannot be read.** With **Keep them through an update** on, a failed read of the saved list left it looking empty, and the next refine saved over it. Now nothing is saved over a list that could not be read, a notification says so, and it is read again next time. The same goes for the names your word swaps picked.
 - **Settings that cannot be read from your account are not overwritten.** A failed read was taken as nothing saved, and this browser's copy was written over the account's, which could undo changes made on another device. Now the panel keeps this browser's copy, writes nothing to the account, says "Your settings could not be read from your account. They are kept in this browser only for now.", and asks again in 10 seconds. Presets, model setups and the chats switched off work the same way.
 - **Test on the Decision connection counts and gives up.** It now counts the seconds while it waits, cannot be pressed again until it has an answer, and gives up after 60 seconds, saying so.
