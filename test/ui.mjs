@@ -16795,12 +16795,68 @@ for (const [label, viewport, touch, zoom] of [
     await settle(page);
     const same = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings.swaps[0].same);
     ok(label + ": Keep the same pick in a chat can be turned off", same === false, String(same));
+    // What to take out shows only while Put instead is empty, and opens over
+    // several frames when it empties.
+    // Filling Put instead closed it, which takes about a quarter of a second.
+    await page.waitForTimeout(700);
+    const cutHidden = await page.evaluate(() => {
+      const rows = document.querySelectorAll("#drawer [data-arf-swap-cut-row]");
+      const r = rows[0];
+      return { n: rows.length, hidden: r && r.hidden, going: r && r._arfGoing, h: r && Math.round(r.getBoundingClientRect().height), put: document.querySelector("#drawer [data-arf-swap-put]").value };
+    });
+    ok(label + ": What to take out is hidden while there is something to put instead", cutHidden.n === 1 && cutHidden.hidden === true, JSON.stringify(cutHidden));
+    const cutOpens = await page.evaluate(async () => {
+      const ta = document.querySelector("#drawer [data-arf-swap-put]");
+      ta.value = "";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("blur"));
+      const out = [];
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const row = document.querySelector("#drawer [data-arf-swap-cut-row]");
+        out.push(row && !row.hidden ? Math.round(row.getBoundingClientRect().height) : 0);
+      }
+      return out;
+    });
+    const cutSteps = new Set(cutOpens.filter((h) => h > 0)).size;
+    ok(label + ": emptied, What to take out opens over several frames", cutSteps >= 3 && cutOpens[cutOpens.length - 1] > 20, cutOpens.join(","));
+    const cutBox = await page.evaluate(() => {
+      const sel = document.querySelector("#drawer [data-arf-swap-cut]");
+      return { wrapped: !!(sel && sel.parentElement && sel.parentElement.classList.contains("arf-selwrap")), value: sel && sel.value, options: sel ? Array.from(sel.options).map((o) => o.textContent) : [] };
+    });
+    ok(
+      label + ": What to take out is a dropdown with the drawn arrow, starting at Only the words",
+      cutBox.wrapped && cutBox.value === "words" && cutBox.options.join("|") === "Only the words|The end of the sentence|The whole sentence",
+      JSON.stringify(cutBox),
+    );
+    await page.evaluate(() => {
+      const sel = document.querySelector("#drawer [data-arf-swap-cut]");
+      sel.value = "sentence";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    if (touch) {
+      await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-notalk]").scrollIntoView({ block: "center" }));
+      await page.tap("#drawer [data-arf-swap-notalk]");
+    } else await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-notalk]").click());
+    await settle(page);
+    const cutSaved = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
+    ok(
+      label + ": The whole sentence and Leave dialogue alone are saved with the swap",
+      cutSaved.swaps[0].cut === "sentence" && cutSaved.swaps[0].noTalk === true && cutSaved.swaps[0].put === "",
+      JSON.stringify(cutSaved.swaps[0]),
+    );
+    const limitRow = await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-field="swapCutMax"]');
+      return box ? { value: box.value, shown: box.getBoundingClientRect().height > 0 } : null;
+    });
+    ok(label + ": Most of a reply a cut may take out shows under the switch, at 30", !!limitRow && limitRow.shown && limitRow.value === "30", JSON.stringify(limitRow));
     // Fits, with tap targets big enough on a phone.
     const look = await page.evaluate((touch) => {
       const out = { sideways: document.documentElement.scrollWidth > innerWidth + 1, small: [], over: [] };
       const card = document.querySelector("#drawer [data-arf-swaps]");
       const right = document.querySelector("#drawer").getBoundingClientRect().right;
-      for (const n of card.querySelectorAll("textarea, button, input")) {
+      for (const n of card.querySelectorAll("textarea, button, input, select")) {
         const r = n.getBoundingClientRect();
         if (r.right > right + 1) out.over.push(n.tagName);
         if (touch && n.type !== "checkbox" && n.offsetHeight < 32) out.small.push((n.textContent || n.tagName).slice(0, 20) + ":" + n.offsetHeight);

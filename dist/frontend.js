@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.58.0";
+const VERSION = "1.59.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -67,6 +67,8 @@ function cleanSwaps(got) {
         find: String(r.find == null ? "" : r.find).slice(0, 4000),
         put: String(r.put == null ? "" : r.put).slice(0, 4000),
         same: r.same !== false,
+        cut: r.cut === "end" || r.cut === "sentence" ? r.cut : "words",
+        noTalk: r.noTalk === true,
     }));
 }
 // The settings, grouped the way somebody thinks about them. Import, export,
@@ -187,7 +189,7 @@ const PARTS = [
         id: "swaps",
         label: "Word swaps",
         what: "The words and phrases swapped in each reply. The names already picked in each chat stay on your account and are not in a file.",
-        keys: ["swapOn", "swapAsk", "swaps"],
+        keys: ["swapOn", "swapAsk", "swapCutMax", "swaps"],
     },
     {
         id: "switches",
@@ -629,6 +631,9 @@ const CONFIG = {
     swapOn: false,
     // Ask before swapping: a reply's swaps wait for a yes. Off by default.
     swapAsk: false,
+    // The most of a reply, in percent, that swaps taking out a whole sentence
+    // or its end may remove. 30 by default. A reply is never emptied.
+    swapCutMax: 30,
     swaps: [],
     // Phrases this chat has worn out. Off by default, since it reads the chat's
     // replies. The list goes wherever a block holds {{overused}}.
@@ -11806,6 +11811,17 @@ export function setup(ctx, overrides) {
             under: true,
             hint: "Off by default. On, a reply's swaps wait for your yes, the same way Ask before saving a refine does.",
         }));
+        wrap.appendChild(fieldRow({
+            key: "swapCutMax",
+            int: true,
+            label: "Most of a reply a cut may take out (%)",
+            type: "num",
+            min: 1,
+            max: 100,
+            needs: { key: "swapOn" },
+            under: true,
+            hint: "30 by default. Counts swaps that take out a whole sentence or the end of one. A reply is never emptied.",
+        }));
         const under = hangsOff(el("div", "arf-col arf-under"), "swapOn", "word swaps");
         under.setAttribute("data-arf-swaps", "1");
         const list = el("div", "arf-col");
@@ -11834,6 +11850,9 @@ export function setup(ctx, overrides) {
                 ta.addEventListener("input", () => {
                     one[part] = ta.value;
                     save(false);
+                    // What to take out shows only while there is nothing to put instead.
+                    if (part === "put")
+                        reveal();
                 });
                 ta.addEventListener("blur", () => {
                     one[part] = ta.value;
@@ -11842,8 +11861,65 @@ export function setup(ctx, overrides) {
                 col.appendChild(ta);
                 return col;
             };
+            // A tick box with its label and "?" on one row, at the foot of a swap.
+            const tick = (label, hint, mark, read, write) => {
+                const row = el("div", "arf-between");
+                const left = el("div", "arf-labrow arf-grow");
+                const tid = nextId();
+                const tl = document.createElement("span");
+                tl.className = "arf-lab";
+                tl.id = tid + "-name";
+                tl.textContent = label;
+                left.appendChild(tl);
+                const tq = hintButton(hint, label);
+                if (tq)
+                    left.appendChild(tq);
+                row.appendChild(left);
+                const box = document.createElement("input");
+                box.type = "checkbox";
+                box.id = tid;
+                box.className = "arf-box";
+                box.setAttribute("aria-labelledby", tl.id);
+                box.setAttribute(mark, "1");
+                box.checked = read();
+                box.addEventListener("change", () => {
+                    write(!!box.checked);
+                    save(true);
+                });
+                row.appendChild(box);
+                return row;
+            };
             box.appendChild(area("Find", "One word or phrase per line. Each is matched as whole words, with capitals ignored.", "find", "data-arf-swap-find"));
             box.appendChild(area("Put instead", "One choice per line, picked at random. Leave it empty to take the words out.", "put", "data-arf-swap-put"));
+            // What goes when there is nothing to put instead. Shown only then.
+            const cutCol = hangsOff(el("div", "arf-col"), () => !String(one.put || "").trim(), "swap-cut");
+            cutCol.setAttribute("data-arf-swap-cut-row", "1");
+            cutCol.appendChild(labelRow({
+                label: "What to take out",
+                hint: "Only the words by default. The end of the sentence starts at the comma, dash or \"and\" before the words.",
+            }));
+            const cutSel = document.createElement("select");
+            cutSel.className = "arf-field";
+            cutSel.setAttribute("aria-label", "What to take out");
+            cutSel.setAttribute("data-arf-swap-cut", "1");
+            for (const [value, text] of [
+                ["words", "Only the words"],
+                ["end", "The end of the sentence"],
+                ["sentence", "The whole sentence"],
+            ]) {
+                const o = document.createElement("option");
+                o.value = value;
+                o.textContent = text;
+                cutSel.appendChild(o);
+            }
+            cutSel.value = one.cut === "end" || one.cut === "sentence" ? one.cut : "words";
+            cutSel.addEventListener("change", () => {
+                const v = cutSel.value;
+                one.cut = v === "end" || v === "sentence" ? v : "words";
+                save(true);
+            });
+            cutCol.appendChild(selectBox(cutSel));
+            box.appendChild(cutCol);
             const foot = el("div", "arf-between");
             const left = el("div", "arf-labrow arf-grow");
             const id = nextId();
@@ -11869,6 +11945,9 @@ export function setup(ctx, overrides) {
             });
             foot.appendChild(same);
             box.appendChild(foot);
+            box.appendChild(tick("Leave dialogue alone", "Off by default. On, the words are left as they are inside quotation marks.", "data-arf-swap-notalk", () => one.noTalk === true, (on) => {
+                one.noTalk = on;
+            }));
             const end = el("div", "arf-row");
             end.appendChild(el("span", "arf-grow"));
             const drop = button("Delete", false);
@@ -11904,7 +11983,7 @@ export function setup(ctx, overrides) {
         add.addEventListener("click", () => {
             if (swaps().length >= SWAPS_MAX)
                 return;
-            const one = { find: "", put: "", same: true };
+            const one = { find: "", put: "", same: true, cut: "words", noTalk: false };
             cfg.swaps = swaps().concat([one]);
             const box = rowFor(one);
             box.hidden = true;

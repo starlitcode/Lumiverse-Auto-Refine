@@ -6,6 +6,22 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.59.0
+
+_2026-11-27_
+
+### Added
+
+- **What to take out**, on each word swap with nothing under **Put instead**. **Only the words** is the default. **The end of the sentence** also takes the part before the words, back to the last comma, semicolon, dash, "and" or "but", so "Tamsin leaned on the post, knuckles white." becomes "Tamsin leaned on the post." **The whole sentence** takes out the sentence that holds the words. A whole sentence is never taken when it holds dialogue, code, a link or a tag. See [Taking out a sentence or its end](docs/swaps.md#taking-out-a-sentence-or-its-end).
+- **Leave dialogue alone**, a tick box on each word swap, off by default. On, the swap skips words inside quotation marks. See [Leaving dialogue alone](docs/swaps.md#leaving-dialogue-alone).
+- **Most of a reply a cut may take out (%)**, under **Ask before swapping**. 30 by default. It counts what **The end of the sentence** and **The whole sentence** take out, and a cut past it is left as it is. The Log says how many were left.
+
+### Changed
+
+- **Word swaps never leave a reply with no words.** If the swaps would take out every word, the reply is left as it was.
+
+---
+
 ## 1.58.0
 
 _2026-11-27_

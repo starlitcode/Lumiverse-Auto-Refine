@@ -9400,6 +9400,130 @@ describe("word swaps", () => {
   });
 });
 
+// Swaps with nothing to put instead can take out the whole sentence, or the
+// end of it, and can leave dialogue alone. A limit keeps them from taking out
+// too much of a reply, and a reply is never emptied.
+describe("word swaps that take out a sentence or its end", () => {
+  const chat = (reply: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The tide is out, and the pier is empty." },
+    { id: "m1", role: "user", content: "i follow the rope down" },
+    { id: "m2", role: "assistant", content: reply },
+  ];
+  const run = async (reply: string, swaps: any[], over: any = {}) => {
+    // No limit unless a test sets one, since these replies are short.
+    const h = await armed([], { refineOn: false, swapOn: true, swapCutMax: 100, swaps, ...over }, chat(reply));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-" + Math.random() });
+    await wait(60);
+    return h;
+  };
+  const whole = (find: string, more: any = {}) => [{ find, put: "", same: true, cut: "sentence", ...more }];
+  const end = (find: string, more: any = {}) => [{ find, put: "", same: true, cut: "end", ...more }];
+
+  test("the whole sentence goes, with the space before it", async () => {
+    const h = await run("Tamsin coiled the rope. Her pulse skipped a beat. She looked at the water.", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("Tamsin coiled the rope. She looked at the water.");
+  });
+
+  test("a sentence at the start of a line takes the space after it", async () => {
+    const h = await run("Her pulse skipped a beat. Tamsin coiled the rope.", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("Tamsin coiled the rope.");
+  });
+
+  test("a sentence that was a whole paragraph takes its line, and no third blank line is left", async () => {
+    const h = await run("Tamsin coiled the rope.\n\nHer pulse skipped a beat.\n\nShe looked at the water.", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("Tamsin coiled the rope.\n\nShe looked at the water.");
+  });
+
+  test("markup around the sentence goes with it, and markup around a longer action stays", async () => {
+    let h = await run("*Her pulse skipped a beat.* Tamsin coiled the rope.", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("Tamsin coiled the rope.");
+    h = await run("*Tamsin coiled the rope. Her pulse skipped a beat.*", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("*Tamsin coiled the rope.*");
+    h = await run("*Her pulse skipped a beat. Tamsin coiled the rope.*", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("*Tamsin coiled the rope.*");
+  });
+
+  test("a sentence with dialogue in it is never taken whole: its end goes, or it stays", async () => {
+    let h = await run('"Hold it," Tamsin said, in a voice like gravel.', whole("in a voice like gravel"));
+    expect(h.body("m2")).toBe('"Hold it," Tamsin said.');
+    h = await run('In a voice like gravel she said "hold it."', whole("in a voice like gravel"));
+    expect(h.body("m2")).toBe('In a voice like gravel she said "hold it."');
+  });
+
+  test("the end of the sentence goes from the comma, the dash or the and before it", async () => {
+    let h = await run("Tamsin leaned on the post, knuckles white.", end("knuckles white"));
+    expect(h.body("m2")).toBe("Tamsin leaned on the post.");
+    h = await run("Tamsin leaned on the post, her knuckles white.", end("knuckles white"));
+    expect(h.body("m2")).toBe("Tamsin leaned on the post.");
+    h = await run("Tamsin leaned on the post — knuckles white.", end("knuckles white"));
+    expect(h.body("m2")).toBe("Tamsin leaned on the post.");
+    h = await run("Tamsin leaned on the post and her knuckles went white.", end("knuckles went white"));
+    expect(h.body("m2")).toBe("Tamsin leaned on the post.");
+  });
+
+  test("words that do not end the sentence are taken out alone", async () => {
+    const h = await run("Tamsin stood, knuckles white, and let go.", end("knuckles white"));
+    expect(h.body("m2")).toBe("Tamsin stood, and let go.");
+  });
+
+  test("Leave dialogue alone keeps the words inside quotation marks", async () => {
+    const swaps = [{ find: "in a voice like gravel", put: "", same: true, noTalk: true }];
+    const h = await run('"Say it in a voice like gravel," Tamsin said. Odo answered in a voice like gravel.', swaps);
+    expect(h.body("m2")).toBe('"Say it in a voice like gravel," Tamsin said. Odo answered.');
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped).toEqual(['"in a voice like gravel" for nothing']);
+  });
+
+  test("Leave dialogue alone works for a swap that puts something in, too", async () => {
+    const swaps = [{ find: "Odo", put: "Fenwick", same: true, noTalk: true }];
+    const h = await run('Odo waved. “Odo is late,” she said.', swaps);
+    expect(h.body("m2")).toBe('Fenwick waved. “Odo is late,” she said.');
+  });
+
+  test("past the limit, a cut is left as it was, and the Log says why", async () => {
+    const reply = "Tamsin coiled the rope. Her pulse skipped a beat and her whole chest felt tight as the tide went out.";
+    let h = await run(reply, whole("pulse skipped a beat"), { swapCutMax: undefined });
+    expect(h.body("m2")).toBe(reply);
+    h = await run(reply, whole("pulse skipped a beat").concat([{ find: "coiled", put: "wound", same: true }]), { swapCutMax: 30 });
+    expect(h.body("m2")).toBe("Tamsin wound the rope. Her pulse skipped a beat and her whole chest felt tight as the tide went out.");
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped.join("; ")).toContain("1 word swap was left as it was, so that no more than 30% of the reply is taken out");
+    h = await run(reply, whole("pulse skipped a beat"), { swapCutMax: 80 });
+    expect(h.body("m2")).toBe("Tamsin coiled the rope.");
+  });
+
+  test("a reply is never emptied, even with no limit", async () => {
+    const reply = "Her pulse skipped a beat.";
+    const h = await run(reply, whole("pulse skipped a beat"), { swapCutMax: 100 });
+    expect(h.body("m2")).toBe(reply);
+  });
+
+  test("a swap with something to put instead swaps the words, whatever its cut says", async () => {
+    const h = await run("Her pulse skipped a beat. Tamsin coiled the rope.", [{ find: "skipped a beat", put: "jumped", same: true, cut: "sentence" }]);
+    expect(h.body("m2")).toBe("Her pulse jumped. Tamsin coiled the rope.");
+  });
+
+  // The example in docs/swaps.md, run as written, with the limit at 30.
+  test("the example on the docs page", async () => {
+    const reply =
+      "Rook set the kettle on the stove and waited for the water to boil. Her pulse skipped a beat. He turned to the window, jaw tight. \"Keep your jaw tight out there,\" he said.";
+    const swaps = [
+      { find: "pulse skipped a beat", put: "", same: true, cut: "sentence" },
+      { find: "jaw tight", put: "", same: true, cut: "end", noTalk: true },
+    ];
+    const h = await run(reply, swaps, { swapCutMax: 30 });
+    expect(h.body("m2")).toBe("Rook set the kettle on the stove and waited for the water to boil. He turned to the window. \"Keep your jaw tight out there,\" he said.");
+    // Without Leave dialogue alone, the words in the dialogue go too.
+    const loose = await run(reply, [swaps[0], { ...swaps[1], noTalk: false }], { swapCutMax: 30 });
+    expect(loose.body("m2")).toBe("Rook set the kettle on the stove and waited for the water to boil. He turned to the window. \"Keep your out there,\" he said.");
+  });
+
+  test("a protected part is never inside a cut", async () => {
+    const h = await run("Tamsin coiled the rope. Her pulse skipped a beat at `knot-9`.", whole("pulse skipped a beat"));
+    expect(h.body("m2")).toBe("Tamsin coiled the rope. Her pulse skipped a beat at `knot-9`.");
+  });
+});
+
 // The example in docs/swaps.md, run through the real code.
 test("the word swaps example in the docs comes out as the docs say", async () => {
   const swaps = [

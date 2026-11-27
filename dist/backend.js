@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.58.0';
+const VERSION = '1.59.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -6160,6 +6160,12 @@ let swapList = [];
 // Ask before swapping: a reply's swaps wait for a yes, the same way Ask
 // before saving holds a refine. A refine with swaps in it asks too.
 let swapAsk = false;
+// The most of a reply, in percent of its letters, numbers and punctuation,
+// that swaps taking out a whole sentence or the end of one may remove. A cut
+// past it is left as it is. Words taken out alone are not counted, since
+// they are a few words at a time. A reply is never emptied, whatever this
+// says.
+let swapCutMax = 30;
 const SWAP_RULES_MAX = 100;
 const SWAP_FINDS_MAX = 30;
 const SWAP_PUTS_MAX = 40;
@@ -6178,7 +6184,9 @@ function swapRulesFrom(raw) {
         const finds = lines(r.find, SWAP_FINDS_MAX);
         if (!finds.length)
             continue;
-        out.push({ finds: finds, puts: lines(r.put, SWAP_PUTS_MAX), same: r.same !== false });
+        const puts = lines(r.put, SWAP_PUTS_MAX);
+        const cut = !puts.length && (r.cut === 'end' || r.cut === 'sentence') ? r.cut : 'words';
+        out.push({ finds: finds, puts: puts, same: r.same !== false, cut: cut, noTalk: r.noTalk === true });
         if (out.length >= SWAP_RULES_MAX)
             break;
     }
@@ -6333,52 +6341,265 @@ function swapUnmask(text, parts) {
     }
     return out;
 }
+// Letters, numbers and punctuation, which is what the limit on taking out
+// counts. Spaces and line breaks are left out of it.
+const inkOf = (t) => String(t).replace(/\s+/g, '').length;
+// Whether a place in the text is inside quotation marks, read from the start
+// of its line. A straight quote opens and closes, and the curly and angled
+// ones each open or close. A line is where most dialogue starts and ends.
+function inTalk(text, at) {
+    const from = text.lastIndexOf('\n', at - 1) + 1;
+    let open = false;
+    for (const ch of text.slice(from, at)) {
+        if (ch === '"')
+            open = !open;
+        else if (ch === '\u201c' || ch === '\u00ab')
+            open = true;
+        else if (ch === '\u201d' || ch === '\u00bb')
+            open = false;
+    }
+    return open;
+}
+const TALK_MARKS = /["\u201c\u201d\u00ab\u00bb]/;
+// A sentence ends at a run of . ! ? or an ellipsis, with any closing
+// quotes, brackets or markup after it, before a space or the end of the line.
+const SENTENCE_END = /[.!?\u2026]+["'\u201d\u2019\u00bb*_)\]]*(?=\s|$)/gu;
+// The sentence around a place in the text, on its own line, without the
+// spaces at either end.
+function sentenceAt(text, at) {
+    const lineStart = text.lastIndexOf('\n', at - 1) + 1;
+    let lineEnd = text.indexOf('\n', at);
+    if (lineEnd < 0)
+        lineEnd = text.length;
+    const line = text.slice(lineStart, lineEnd);
+    let from = 0;
+    let to = line.length;
+    SENTENCE_END.lastIndex = 0;
+    for (let m = SENTENCE_END.exec(line); m; m = SENTENCE_END.exec(line)) {
+        const stop = m.index + m[0].length;
+        if (lineStart + stop > at) {
+            to = stop;
+            break;
+        }
+        from = stop;
+    }
+    while (from < to && /\s/.test(line[from]))
+        from++;
+    while (to > from && /\s/.test(line[to - 1]))
+        to--;
+    return { start: lineStart + from, end: lineStart + to };
+}
+// What a whole-sentence cut takes. Markup around the whole sentence, such as
+// *...*, goes with it. Markup that opens or closes a longer stretch, such as
+// the * that starts an action two sentences long, stays.
+function wholeSentence(text, s) {
+    let lead = 0;
+    while (s.start + lead < s.end && /[*_]/.test(text[s.start + lead]))
+        lead++;
+    let trail = 0;
+    while (s.end - trail > s.start + lead && /[*_]/.test(text[s.end - trail - 1]))
+        trail++;
+    if (lead === trail)
+        return { start: s.start, end: s.end };
+    return { start: s.start + lead, end: s.end - trail };
+}
+// What an end-of-sentence cut takes: from the last comma, semicolon, dash,
+// "and" or "but" before the found words to the end of them, when nothing but
+// closing punctuation comes after them and at least two words come before.
+// Null when the sentence has no such end.
+function sentenceEnd(text, s, found) {
+    if (!/^[\s.!?\u2026"'\u201d\u2019\u00bb*_)\]]*$/u.test(text.slice(found.end, s.end)))
+        return null;
+    const head = text.slice(s.start, found.start);
+    let cut = -1;
+    for (let i = head.length - 1; i >= 0; i--) {
+        if (/[,;\u2014\u2013]/.test(head[i])) {
+            cut = i;
+            break;
+        }
+        if (/\s/.test(head[i]) && /^\s(?:and|but)\s/i.test(head.slice(i))) {
+            cut = i;
+            break;
+        }
+    }
+    if (cut < 0)
+        return null;
+    // The spaces in front of a comma or a dash go with it.
+    while (cut > 0 && /[ \t]/.test(head[cut - 1]))
+        cut--;
+    if ((head.slice(0, cut).match(/[\p{L}\p{N}]+/gu) || []).length < 2)
+        return null;
+    return { start: s.start + cut, end: found.end };
+}
+// Takes a stretch out of the text and tidies the spaces it leaves. A
+// stretch at the start of a line, or just after markup that opens one, takes
+// the spaces after it, and any other takes the spaces before it. A line left with nothing on it goes, and so
+// does a third blank line in a row.
+function cutOut(text, start, end) {
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    let a = start;
+    let b = end;
+    const before = text.slice(lineStart, a);
+    // Markup that opens a stretch, such as the * of an action, counts as the
+    // start of the line.
+    if (!/\S/.test(before) || /(^|\s)[*_]+$/.test(before))
+        while (b < text.length && /[ \t]/.test(text[b]))
+            b++;
+    else
+        while (a > lineStart && /[ \t]/.test(text[a - 1]))
+            a--;
+    let out = text.slice(0, a) + text.slice(b);
+    let lineEnd = out.indexOf('\n', lineStart);
+    if (lineEnd < 0)
+        lineEnd = out.length;
+    if (!/\S/.test(out.slice(lineStart, lineEnd))) {
+        if (lineEnd < out.length)
+            out = out.slice(0, lineStart) + out.slice(lineEnd + 1);
+        else if (lineStart > 0)
+            out = out.slice(0, lineStart - 1);
+        else
+            out = out.slice(lineEnd);
+        let x = Math.min(lineStart, out.length);
+        let y = x;
+        while (x > 0 && out[x - 1] === '\n')
+            x--;
+        while (y < out.length && out[y] === '\n')
+            y++;
+        if (y - x > 2)
+            out = out.slice(0, x) + '\n\n' + out.slice(y);
+    }
+    return out;
+}
 // The swaps on one piece of text. pick chooses among a rule's choices for a
-// found word. Longer finds go first, so a phrase wins over a word inside it,
-// and nothing a swap put in is swapped again.
-function swapWords(text, rules, pick) {
+// found word. Swaps that take out a sentence or its end go first, then the
+// rest, longer finds first, so a phrase wins over a word inside it, and
+// nothing a swap put in is swapped again. cutMax is the most of the reply,
+// in percent, that sentences and their ends may take out. held counts what
+// was left as it was because of it.
+function swapWords(text, rules, pick, cutMax = 100) {
     const swapped = [];
     if (!rules.length || !String(text).trim())
-        return { text: text, swapped: swapped, full: false };
+        return { text: text, swapped: swapped, full: false, held: 0 };
     const masked = swapMask(String(text));
     if (masked.full)
-        return { text: text, swapped: swapped, full: true };
+        return { text: text, swapped: swapped, full: true, held: 0 };
     const parts = masked.parts;
     let full = false;
     let out = masked.text;
+    const budget = Math.floor((inkOf(String(text)) * Math.max(1, Math.min(100, cutMax))) / 100);
+    let spent = 0;
+    let held = 0;
+    let any = false;
+    const note = (gone) => {
+        if (swapped.length < 40)
+            swapped.push('"' + gone.replace(/\s+/g, ' ').trim() + '" for nothing');
+    };
+    const capOf = (t) => {
+        const first = Array.from(t).find((c) => /\p{L}/u.test(c)) || '';
+        return !!first && first === first.toUpperCase() && first !== first.toLowerCase();
+    };
+    const cuts = [];
+    for (const rule of rules) {
+        if (rule.puts.length || rule.cut === 'words')
+            continue;
+        for (const find of rule.finds) {
+            const re = swapPattern(find);
+            if (!re)
+                continue;
+            for (const m of out.matchAll(re)) {
+                const at = (m.index || 0) + m[1].length;
+                const found = { start: at, end: at + m[2].length };
+                if (rule.noTalk && inTalk(out, found.start))
+                    continue;
+                const s = sentenceAt(out, found.start);
+                const clean = (r) => {
+                    const t = out.slice(r.start, r.end);
+                    return !TALK_MARKS.test(t) && t.indexOf(SW_OPEN) < 0;
+                };
+                const whole = rule.cut === 'sentence' ? wholeSentence(out, s) : null;
+                const tail = sentenceEnd(out, s, found);
+                if (whole && clean(whole))
+                    cuts.push({ ...whole, words: false });
+                else if (tail && clean(tail))
+                    cuts.push({ ...tail, words: false });
+                else if (rule.cut === 'end')
+                    cuts.push({ ...found, words: true });
+            }
+        }
+    }
+    // Overlapping stretches are joined into one, and words inside a stretch
+    // go with it.
+    cuts.sort((x, y) => x.start - y.start || y.end - x.end);
+    const joined = [];
+    for (const c of cuts) {
+        const last = joined[joined.length - 1];
+        if (last && c.start < last.end) {
+            if (!c.words || !last.words) {
+                last.end = Math.max(last.end, c.end);
+                last.words = false;
+            }
+            continue;
+        }
+        joined.push({ ...c });
+    }
+    const taken = [];
+    for (const c of joined) {
+        const cost = inkOf(out.slice(c.start, c.end));
+        if (spent + cost > budget) {
+            held++;
+            continue;
+        }
+        spent += cost;
+        taken.push(c);
+    }
+    for (const c of taken)
+        note(out.slice(c.start, c.end));
+    for (const c of taken.slice().reverse()) {
+        any = true;
+        if (c.words)
+            out = out.slice(0, c.start) + (capOf(out.slice(c.start, c.end)) ? SW_GONE_CAP : SW_GONE) + out.slice(c.end);
+        else
+            out = cutOut(out, c.start, c.end);
+    }
     const finds = [];
-    for (const rule of rules)
+    for (const rule of rules) {
+        if (!rule.puts.length && rule.cut !== 'words')
+            continue;
         for (const find of rule.finds)
             finds.push({ rule: rule, find: find });
+    }
     finds.sort((a, b) => b.find.length - a.find.length);
-    let any = false;
     for (const { rule, find } of finds) {
         const re = swapPattern(find);
         if (!re)
             continue;
-        out = out.replace(re, (whole, before, found) => {
+        out = out.replace(re, (whole, before, found, offset, all) => {
+            if (rule.noTalk && inTalk(all, offset + before.length))
+                return whole;
             // No stand-in left for what would go in: this one and the rest stay.
             if (parts.length >= SW_TOKENS_MAX) {
                 full = true;
                 return whole;
             }
-            any = true;
             const put = keepCase(found, pick(rule, found));
+            any = true;
             if (swapped.length < 40)
                 swapped.push('"' + found.replace(/\s+/g, ' ') + '" for ' + (put ? '"' + put + '"' : 'nothing'));
-            if (!put) {
-                const first = Array.from(found).find((c) => /\p{L}/u.test(c)) || '';
-                const cap = !!first && first === first.toUpperCase() && first !== first.toLowerCase();
-                return before + (cap ? SW_GONE_CAP : SW_GONE);
-            }
+            if (!put)
+                return before + (capOf(found) ? SW_GONE_CAP : SW_GONE);
             parts.push(put);
             return before + swToken(parts.length - 1);
         });
     }
     if (!any)
-        return { text: text, swapped: swapped, full: full };
+        return { text: text, swapped: [], full: full, held: held };
     out = tidyGone(out);
-    return { text: swapUnmask(out, parts), swapped: swapped, full: full };
+    const done = swapUnmask(out, parts);
+    // Never an empty reply: a reply that would be left with no words keeps
+    // them all.
+    if (/[\p{L}\p{N}]/u.test(String(text)) && !/[\p{L}\p{N}]/u.test(done.replace(/<[^>]*>/g, '')))
+        return { text: text, swapped: [], full: full, held: held + 1 };
+    return { text: done, swapped: swapped, full: full, held: held };
 }
 // The picks made in each chat, kept on the account, so a name swapped in a
 // chat is swapped for the same name in every later reply of it.
@@ -6487,7 +6708,16 @@ async function swapIn(text, chatId, userId, hold) {
         made[k] = got;
         return got;
     };
-    const done = swapWords(text, swapList, pick);
+    const done = swapWords(text, swapList, pick, swapCutMax);
+    if (done.held) {
+        const why = done.held +
+            (done.held === 1 ? ' word swap was' : ' word swaps were') +
+            ' left as ' + (done.held === 1 ? 'it was' : 'they were') +
+            ', so that no more than ' + swapCutMax + '% of the reply is taken out';
+        say('info', why);
+        if (done.swapped.length && done.swapped.length < 40)
+            done.swapped.push(why);
+    }
     if (done.full) {
         const why = 'a reply has more pieces than word swaps can keep track of, so part of it was left as it is';
         say('warn', why);
@@ -7381,6 +7611,8 @@ function applyRules(s) {
     swapOn = s.swapOn === true;
     swapAsk = s.swapAsk === true;
     swapList = swapRulesFrom(s.swaps);
+    swapCutMax = Number(s.swapCutMax);
+    swapCutMax = Number.isFinite(swapCutMax) ? Math.max(1, Math.min(100, Math.round(swapCutMax))) : 30;
     wornOn = !!s.wornOn;
     wornBack = Number(s.wornBack);
     wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
