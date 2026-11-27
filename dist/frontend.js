@@ -9491,6 +9491,8 @@ export function setup(ctx, overrides) {
             return false;
         }
     }
+    // The notification the in-panel ask uses, in the same color as the dialog.
+    const ASK_NOTE = { danger: "error", warning: "warning", default: "info" };
     async function askHost(spec) {
         if (!(ctx && ctx.ui && typeof ctx.ui.showConfirm === "function"))
             return null;
@@ -9505,7 +9507,7 @@ export function setup(ctx, overrides) {
             answer = await ctx.ui.showConfirm({
                 title: spec.title,
                 message: spec.message,
-                variant: "danger",
+                variant: spec.variant,
                 confirmLabel: spec.confirmLabel,
             });
         }
@@ -9575,7 +9577,7 @@ export function setup(ctx, overrides) {
             doConfirmed(go);
             return;
         }
-        toast(armSays, true);
+        toast(armSays, true, ASK_NOTE[spec.variant]);
         armedFor.set(key, setTimeout(() => armedFor.delete(key), ARM_MS));
     }
     function showPop(one) {
@@ -10756,6 +10758,8 @@ export function setup(ctx, overrides) {
                 title: "Delete block",
                 message: "Delete " + blockLabel(b) + " from this prompt? There is no undo, and what it says goes with it.",
                 confirmLabel: "Delete",
+                // Deletes, so it is drawn as danger.
+                variant: "danger",
             }, "Press Delete again to remove this block.", () => {
                 const next = blockList();
                 next.splice(i, 1);
@@ -11453,6 +11457,8 @@ export function setup(ctx, overrides) {
                 title: "Delete setup",
                 message: "Delete the setup " + one.name + "? There is no undo.",
                 confirmLabel: "Delete",
+                // Deletes, so it is drawn as danger.
+                variant: "danger",
             }, "Press Delete again to remove " + one.name + ".", () => {
                 setups = setups.filter((x) => x !== one);
                 saveSetups();
@@ -11616,6 +11622,8 @@ export function setup(ctx, overrides) {
                 title: "Use " + these,
                 message: "Replace what is in " + label + " with " + these + "? What you wrote there is not kept.",
                 confirmLabel: "Replace",
+                // What you wrote is lost, so it is drawn as danger.
+                variant: "danger",
             }, "Press Use " + these + " again to replace yours.", () => {
                 // The box shows the built-in text again, so no notification is sent.
                 cfg[key] = list;
@@ -11876,6 +11884,8 @@ export function setup(ctx, overrides) {
                     title: "Delete swap",
                     message: "Delete " + named() + "? There is no undo.",
                     confirmLabel: "Delete",
+                    // Deletes, so it is drawn as danger.
+                    variant: "danger",
                 }, "Press Delete again to remove this swap.", () => {
                     foldAway(box, () => {
                         cfg.swaps = swaps().filter((x) => x !== one);
@@ -13048,6 +13058,8 @@ export function setup(ctx, overrides) {
             title: "Use the built-in list",
             message: "Replace what is in " + label + " with the built-in list? What you wrote there is not kept.",
             confirmLabel: "Replace",
+            // What you wrote is lost, so it is drawn as danger.
+            variant: "danger",
         }, "Press Use the built-in list again to replace yours.", go);
     }
     // The words under a selector box after a pick, until the next Test.
@@ -15157,6 +15169,8 @@ export function setup(ctx, overrides) {
                 title: "Delete preset",
                 message: "Delete the preset " + p.name + "? It holds a whole prompt, and there is no undo.",
                 confirmLabel: "Delete",
+                // Deletes, so it is drawn as danger.
+                variant: "danger",
             }, "Press Delete again to remove " + p.name + ".", () => {
                 presets = presets.filter((x) => x !== p);
                 savePresets();
@@ -15237,7 +15251,7 @@ export function setup(ctx, overrides) {
         const message = "This puts back the defaults for: " +
             names +
             ". There is no undo, and your prompt is not recoverable unless you exported it.";
-        const said = await askHost({ title: title, message: message, confirmLabel: "Reset" });
+        const said = await askHost({ title: title, message: message, confirmLabel: "Reset", variant: "danger" });
         const asked = said !== null;
         let yes = said === true;
         if (!asked) {

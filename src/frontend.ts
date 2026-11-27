@@ -9627,10 +9627,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // What a question is, which sets how Lumiverse draws it: danger for one that
+  // deletes or loses something, warning for a caution that loses nothing, such
+  // as a change with a cost, and default for a plain question. Auto Retry picks
+  // the same way.
+  type AskKind = "danger" | "warning" | "default";
+  // The notification the in-panel ask uses, in the same color as the dialog.
+  const ASK_NOTE: Record<AskKind, "error" | "warning" | "info"> = { danger: "error", warning: "warning", default: "info" };
   async function askHost(spec: {
     title: string;
     message: string;
     confirmLabel: string;
+    variant: AskKind;
   }): Promise<boolean | null> {
     if (!(ctx && ctx.ui && typeof ctx.ui.showConfirm === "function")) return null;
     // Asked in the panel instead where the dialog would cost the reader their
@@ -9643,7 +9651,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       answer = await ctx.ui.showConfirm({
         title: spec.title,
         message: spec.message,
-        variant: "danger",
+        variant: spec.variant,
         confirmLabel: spec.confirmLabel,
       });
     } catch (_) {
@@ -9696,7 +9704,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   async function askFirst(
     key: string,
-    spec: { title: string; message: string; confirmLabel: string },
+    spec: { title: string; message: string; confirmLabel: string; variant: AskKind },
     armSays: string,
     go: () => void,
   ) {
@@ -9712,7 +9720,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       doConfirmed(go);
       return;
     }
-    toast(armSays, true);
+    toast(armSays, true, ASK_NOTE[spec.variant]);
     armedFor.set(
       key,
       setTimeout(() => armedFor.delete(key), ARM_MS),
@@ -10926,6 +10934,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           message:
             "Delete " + blockLabel(b) + " from this prompt? There is no undo, and what it says goes with it.",
           confirmLabel: "Delete",
+          // Deletes, so it is drawn as danger.
+          variant: "danger",
         },
         "Press Delete again to remove this block.",
         () => {
@@ -11720,6 +11730,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           title: "Delete setup",
           message: "Delete the setup " + one.name + "? There is no undo.",
           confirmLabel: "Delete",
+          // Deletes, so it is drawn as danger.
+          variant: "danger",
         },
         "Press Delete again to remove " + one.name + ".",
         () => {
@@ -11913,6 +11925,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           title: "Use " + these,
           message: "Replace what is in " + label + " with " + these + "? What you wrote there is not kept.",
           confirmLabel: "Replace",
+          // What you wrote is lost, so it is drawn as danger.
+          variant: "danger",
         },
         "Press Use " + these + " again to replace yours.",
         () => {
@@ -12267,6 +12281,8 @@ export function setup(ctx: Ctx, overrides?: any) {
             title: "Delete swap",
             message: "Delete " + named() + "? There is no undo.",
             confirmLabel: "Delete",
+            // Deletes, so it is drawn as danger.
+            variant: "danger",
           },
           "Press Delete again to remove this swap.",
           () => {
@@ -13539,6 +13555,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         title: "Use the built-in list",
         message: "Replace what is in " + label + " with the built-in list? What you wrote there is not kept.",
         confirmLabel: "Replace",
+        // What you wrote is lost, so it is drawn as danger.
+        variant: "danger",
       },
       "Press Use the built-in list again to replace yours.",
       go,
@@ -15681,6 +15699,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           message:
             "Delete the preset " + p.name + "? It holds a whole prompt, and there is no undo.",
           confirmLabel: "Delete",
+          // Deletes, so it is drawn as danger.
+          variant: "danger",
         },
         "Press Delete again to remove " + p.name + ".",
         () => {
@@ -15784,7 +15804,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       "This puts back the defaults for: " +
       names +
       ". There is no undo, and your prompt is not recoverable unless you exported it.";
-    const said = await askHost({ title: title, message: message, confirmLabel: "Reset" });
+    const said = await askHost({ title: title, message: message, confirmLabel: "Reset", variant: "danger" });
     const asked = said !== null;
     let yes = said === true;
     if (!asked) {

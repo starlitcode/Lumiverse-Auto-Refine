@@ -17253,6 +17253,31 @@ console.log("\nanything taken off the panel leaves smoothly");
   }
 }
 
+// The question is drawn by what it is: danger for one that deletes or loses
+// something. In Lumiverse's dialog it is the variant; asked on the button
+// instead, the notification is the matching color.
+console.log("\na delete is asked as danger");
+for (const [label, viewport] of [["a short page, in Lumiverse's dialog", { width: 1280, height: 3000 }], ["a page that scrolls, on the button", { width: 390, height: 700 }]]) {
+  await inTab(browser, { viewport, saved: { enabled: true, swapOn: true, swaps: [{ find: "jolt", put: "shiver", same: true }] } }, async (page, errors) => {
+    await goTab(page, "Limits");
+    await settle(page);
+    const out = await page.evaluate(async () => {
+      window.__confirms = [];
+      window.__confirmSay = false;
+      const before = window.__sent.length;
+      document.querySelector("#drawer [data-arf-swap-delete]").click();
+      await new Promise((r) => setTimeout(r, 200));
+      return {
+        variants: (window.__confirms || []).map((c) => c.variant),
+        kinds: window.__sent.slice(before).filter((m) => m.type === "notify").map((m) => m.kind),
+      };
+    });
+    const asked = out.variants.length ? out.variants[0] === "danger" : out.kinds[0] === "error";
+    ok(label + ": deleting a swap is asked as danger", asked, JSON.stringify(out));
+    ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

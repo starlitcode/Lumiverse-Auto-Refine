@@ -17,6 +17,7 @@ _2026-11-26_
 
 ### Changed
 
+- **A question that deletes something looks like one.** When the panel asks before deleting a block, a swap, a preset or a setup, or before putting built-in text over yours, it is drawn as a danger, in red. That was already so in Lumiverse's own dialog. When it asks on the button instead, by pressing again, the notification is now red as well, where it was blue.
 - **Thinking starts at Low.** **How much thinking** now starts at Low instead of Medium. Low is enough for a rewrite, and a higher level takes longer and costs more. If you are on Medium, the panel offers you the new default.
 - **A call is no longer sent again after it started answering.** **Wait out a provider that will not take the call** waited and asked again after errors that can come after the model started writing, such as 504 or a dropped connection, when the provider may already have charged for the call. A stream that broke partway was also sent again as a plain call. Now a call is only sent again when nothing of the answer came back. A rate limit (429), a busy server (503 or 529), or a connection that could not be made always counts as nothing came back. When a call fails after part of the answer arrived, the reply is left as it was, and the Log says why. See [A call that had started](docs/guardrails.md#a-call-that-had-started).
 
