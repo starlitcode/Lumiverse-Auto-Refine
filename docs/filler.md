@@ -3,7 +3,8 @@
 ## In short
 
 - **Cut filler** takes sentences out of each new reply when your Decision model is sure they are filler.
-- Nothing is rewritten. A sentence is kept as it is, or taken out whole.
+- Nothing is rewritten. A sentence is kept as it is, taken out whole, or loses its end.
+- **Trim the end of a sentence** is on by default. The part after the last comma, dash, "and" or "but" can go on its own, such as ", jaw tight".
 - It costs one Decision call for each reply.
 - What it asks the model is in a box you can read and change, with **Use the built-in text** to go back.
 - **Leave dialogue alone** is on by default, so a sentence with dialogue in it is not sent or cut.
@@ -17,9 +18,10 @@
 3. Open the **Limits** tab and find the **Cut filler** card.
 4. Switch on **Cut filler from each reply**.
 5. Leave **Cut when it is at least this sure (%)** at 70 to start. A lower number cuts more sentences, and more of them by mistake.
-6. To use a Decision connection other than your default one, pick it under **Which Decision connection**, on the **Model** tab. It shows while Cut filler is on.
-7. To see each reply's cuts before they are saved, turn on **Ask before cutting**.
-8. The next reply is checked. The Log shows each sentence that was cut, and how sure the model was.
+6. Leave **Cut an end when it is at least this sure (%)** at 60 to start. It is the same kind of number, for the end of a sentence.
+7. To use a Decision connection other than your default one, pick it under **Which Decision connection**, on the **Model** tab. It shows while Cut filler is on.
+8. To see each reply's cuts before they are saved, turn on **Ask before cutting**.
+9. The next reply is checked. The Log shows each sentence that was cut, and how sure the model was.
 
 ## What it sends
 
@@ -27,6 +29,7 @@ One call for each reply, through Lumiverse, to the Decision connection in use. I
 
 - the reply, with its thinking taken out, named `reply`
 - one question for each sentence, made from **What it asks about each sentence**, with the sentence in quotation marks where `{{sentence}}` is
+- with **Trim the end of a sentence** on, one more question for each sentence that has an end, made from **What it asks about the end of a sentence**
 
 The built-in question is:
 
@@ -36,6 +39,16 @@ Filler is a stock line about a body, a look or a pause, such as a held breath, a
 ```
 
 A question of your own without `{{sentence}}` has the sentence added on a line of its own at the end, so every question still names its sentence.
+
+The built-in question about the end of a sentence is:
+
+```
+The end of this sentence from `reply` is filler: {{end}}
+The whole sentence is {{sentence}}
+Filler is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw. The sentence reads the same without its end.
+```
+
+`{{end}}` is where the end goes, and `{{sentence}}` is the whole sentence, each in quotation marks. A question of your own without `{{end}}` has the end added on a line of its own at the end.
 
 Lumiverse asks the model how likely each question is to be true, from 0 to 1. Auto Refine shows that as a percent.
 
@@ -73,6 +86,36 @@ The Log says:
 
 **Put it back**, on the Auto Refine tab, brings the sentence back.
 
+## The end of a sentence
+
+A sentence can be fine except for its end, such as "She set down the cup, jaw tight." With **Trim the end of a sentence** on, Cut filler can take out just the end.
+
+1. The end is the part after the last comma, semicolon, dash, "and" or "but", when at least two words come before it. It is the same end a [word swap](swaps.md#taking-out-a-sentence-or-its-end) takes with **The end of the sentence**.
+2. The end gets a question of its own, in the same call as the sentence's question.
+3. If the model is at least as sure as **Cut an end when it is at least this sure (%)**, only the end goes. This holds even when the whole sentence is sure enough too, since taking out the end takes out less.
+4. Otherwise, the sentence goes whole if it is at least as sure as **Cut when it is at least this sure (%)**.
+5. An end counts toward **Most of a reply it may take out (%)**, the same as a sentence.
+
+For example, Inés's next reply is:
+
+> Bram hung his coat by the door, his heart racing. The road outside was empty.
+
+Auto Refine sends three questions: one for each sentence, and one for the end "his heart racing". The model answers:
+
+| Question | How sure it is filler |
+| --- | --- |
+| Bram hung his coat by the door, his heart racing. | 45% |
+| The end: his heart racing | 72% |
+| The road outside was empty. | 10% |
+
+The end is over 60%, so it goes. The reply is saved as:
+
+> Bram hung his coat by the door. The road outside was empty.
+
+The Log says:
+
+- "his heart racing" cut from the end of a sentence as filler, 72% sure
+
 ## The settings
 
 All of these are under **Cut filler from each reply**, and show only while it is on.
@@ -84,6 +127,9 @@ All of these are under **Cut filler from each reply**, and show only while it is
 | **Leave dialogue alone** | On | A sentence with dialogue in it is not sent or cut. |
 | **Most of a reply it may take out (%)** | 30 | The surest sentences go first, while they fit under this. From 1 to 100. |
 | **What it asks about each sentence** | The built-in text | The question sent for each sentence. **Use the built-in text** puts the built-in one back. |
+| **Trim the end of a sentence** | On | The end of a sentence is asked about too, and can go on its own. See [The end of a sentence](#the-end-of-a-sentence). |
+| **Cut an end when it is at least this sure (%)** | 60 | An end goes when the model is at least this sure it is filler. From 1 to 100. Shows while **Trim the end of a sentence** is on. |
+| **What it asks about the end of a sentence** | The built-in text | The question sent for each end. **Use the built-in text** puts the built-in one back. Shows while **Trim the end of a sentence** is on. |
 
 ## Why 70
 
@@ -94,6 +140,16 @@ All of these are under **Cut filler from each reply**, and show only while it is
 - At 90, 1 of the 48 filler sentences was cut.
 - At 70, 32 to 34 were cut, over three runs. No sentence that was not filler was cut.
 - One sentence that was not filler scored 72%. **Most of a reply it may take out (%)** kept it in, since the surest sentences go first.
+
+### Why 60 for an end
+
+60 comes from the same test, with 20 more made-up replies. Ten of them had a sentence with a filler end, such as ", her hands trembling".
+
+- The filler ends scored from 64% to 78%.
+- The other ends scored 55% at most. These are ends that say what happens, such as ", and it broke on the tiles".
+- At 60, all 10 filler ends were cut, and no other end.
+- At 70, 5 of the 10 were cut.
+- A sentence that ends in filler often scores high as a whole, because of its end. With ends asked about, one such sentence lost only its end instead of being cut whole.
 
 Another Decision model can score the same sentences higher or lower. If it cuts too little, lower the number. If it cuts sentences you want, raise it.
 
@@ -126,7 +182,7 @@ The reply is left as it was, and the reason is said in plain words. A notificati
 The Decision model can be sure about a sentence that mattered.
 
 - **Put it back** brings back what was cut.
-- A higher number under **Cut when it is at least this sure (%)** cuts less.
+- A higher number under **Cut when it is at least this sure (%)** or **Cut an end when it is at least this sure (%)** cuts less.
 - **Ask before cutting** shows each reply's cuts before they are saved.
 - **What it asks about each sentence** can say what filler means in your story.
 
@@ -135,6 +191,8 @@ The Decision model can be sure about a sentence that mattered.
 - A reply with only one sentence is not sent. A reply is never emptied.
 - A sentence is found by its end: a period, a question mark, an exclamation mark or an ellipsis, before a space or the end of a line. See [How a sentence is found](swaps.md#how-a-sentence-is-found).
 - Up to 120 sentences of a reply are asked about. The rest of a longer reply is left as it is, and the Log says how many.
+- A sentence with an end is two questions in the same call, so the call is longer. In the test above, a reply was about 880 tokens with ends asked about, and about 730 without.
+- Only the last end of a sentence is asked about. A sentence with two filler ends loses at most one.
 - With [Two models](two-models.md) on as well, a reply has two Decision calls: one to decide whether to refine it, and one for Cut filler.
 
 ---

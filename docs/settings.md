@@ -102,7 +102,7 @@ Theo has the automatic refine on, **Cut filler** on, and one word swap: **jaw ti
 1. The refine model rewrites it:
    > Mara pushed the gate open, and the hinges groaned. Her breath caught. She crossed into the yard, jaw tight.
 2. The rewrite passes every check.
-3. Cut filler sends the rewrite to the Decision model. It is 95% sure "Her breath caught." is filler, so that sentence goes.
+3. Cut filler sends the rewrite to the Decision model. It is 95% sure "Her breath caught." is filler, so that sentence goes. It is not sure enough about the end of any sentence, so no end goes.
 4. The word swap takes out ", jaw tight".
 5. It is saved in one write:
    > Mara pushed the gate open, and the hinges groaned. She crossed into the yard.
@@ -280,7 +280,8 @@ The same rules are used in Auto Retry and Auto Foley.
 **Cut filler.** See [Cut filler](filler.md).
 
 - **Cut filler from each reply** is off by default. On, each new reply's sentences go to your Decision model in one call, and the ones it is sure are filler are taken out. It costs one Decision call per reply.
-  - Under it: **Ask before cutting**, **Cut when it is at least this sure (%)**, **Leave dialogue alone**, **Most of a reply it may take out (%)** and **What it asks about each sentence**, with **Use the built-in text**. See [The settings](filler.md#the-settings).
+  - Under it: **Ask before cutting**, **Cut when it is at least this sure (%)**, **Leave dialogue alone**, **Most of a reply it may take out (%)**, **What it asks about each sentence**, with **Use the built-in text**, and **Trim the end of a sentence**, on by default.
+  - Under **Trim the end of a sentence**: **Cut an end when it is at least this sure (%)**, 60 by default, and **What it asks about the end of a sentence**, with **Use the built-in text**. See [The settings](filler.md#the-settings).
   - It asks through **Which Decision connection**, on the Model tab, or your default Decision connection.
 
 ## Log

@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.61.0
+
+_2026-11-27_
+
+### Added
+
+- **Trim the end of a sentence**, under **Cut filler from each reply**, on by default. The part of a sentence after its last comma, semicolon, dash, "and" or "but" gets a question of its own, in the same call. When the model is sure enough, only that end goes, so "She set down the cup, jaw tight." becomes "She set down the cup." This holds even when the whole sentence is sure enough too, since taking out the end takes out less. The Log shows each end cut and how sure the model was. See [The end of a sentence](docs/filler.md#the-end-of-a-sentence).
+- **Cut an end when it is at least this sure (%)**, under **Trim the end of a sentence**, 60 by default. In a test with jev-latest, filler ends scored from 64% to 78%, and other ends 55% at most. See [Why 60 for an end](docs/filler.md#why-60-for-an-end).
+- **What it asks about the end of a sentence**, under **Trim the end of a sentence**, with `{{end}}` where the end goes and `{{sentence}}` for the whole sentence, and **Use the built-in text** to go back.
+
+---
+
 ## 1.60.0
 
 _2026-11-27_

@@ -9462,6 +9462,9 @@ describe("Cut filler", () => {
     }
     return { status: 200, body: JSON.stringify({ answers: answers, model: "test-model" }) };
   };
+  // The questions about whole sentences. A question about the end of one
+  // has an id of its own, starting with "e".
+  const sentenceIds = (h: any): string[] => Object.keys(h.jevCalls[0].body.questions).filter((id) => id[0] === "s");
   const run = async (over: any = {}, reply = REPLY, jev: any = (_u: string, init: any) => answer(init)) => {
     const h = await armed([], { refineOn: false, fillerOn: true, ...over }, chat(reply), { jev: jev });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-" + Math.random() });
@@ -9522,10 +9525,10 @@ describe("Cut filler", () => {
   test("Leave dialogue alone: a sentence with dialogue is not asked about", async () => {
     const reply = 'Bram lit the stove. "His pulse quickened," she read aloud. A long moment passed.';
     let h = await run({ fillerCutMax: 100 }, reply);
-    expect(Object.keys(h.jevCalls[0].body.questions).length).toBe(2);
+    expect(sentenceIds(h).length).toBe(2);
     expect(h.body("m2")).toBe('Bram lit the stove. "His pulse quickened," she read aloud.');
     h = await run({ fillerCutMax: 100, fillerTalk: false }, reply);
-    expect(Object.keys(h.jevCalls[0].body.questions).length).toBe(3);
+    expect(sentenceIds(h).length).toBe(3);
   });
 
   test("a reply is never emptied", async () => {
@@ -9572,7 +9575,7 @@ describe("Cut filler", () => {
 
   // The sentences a reply was split into, as the questions name them.
   const askedAbout = (h: any): string[] =>
-    Object.values(h.jevCalls[0].body.questions).map((q: any) => JSON.parse(String(q.instructions).match(/filler: ("(?:[^"\\]|\\.)*")/)![1]));
+    sentenceIds(h).map((id) => JSON.parse(String(h.jevCalls[0].body.questions[id].instructions).match(/filler: ("(?:[^"\\]|\\.)*")/)![1]));
   const allSure = () => (_u: string, init: any) => {
     const answers: Record<string, any> = {};
     for (const id of Object.keys(JSON.parse(init.body).questions)) answers[id] = { type: "noul", noul: 0.99 };
@@ -9589,6 +9592,109 @@ describe("Cut filler", () => {
   test("a sentence of its own after a quote is still asked about", async () => {
     const h = await run({}, '"Is the kettle on?" Coll lit the stove under it. A long moment passed.');
     expect(askedAbout(h)).toEqual(["Coll lit the stove under it.", "A long moment passed."]);
+  });
+
+  // The end of a sentence: the model answers each sentence question and each
+  // end question from its own table, found by a piece of the sentence.
+  const ENDS = "Bram set the kettle on the iron ring, his jaw tight. The water began to tick as it warmed.";
+  const byKind = (whole: Record<string, number>, ends: Record<string, number>) => (_u: string, init: any) => {
+    const body = JSON.parse(init.body);
+    const answers: Record<string, any> = {};
+    for (const id of Object.keys(body.questions)) {
+      const q = String(body.questions[id].instructions);
+      const table = id[0] === "e" ? ends : whole;
+      const hit = Object.keys(table).find((k) => q.includes(k));
+      answers[id] = { type: "noul", noul: hit ? table[hit] : 0.1 };
+    }
+    return { status: 200, body: JSON.stringify({ answers }) };
+  };
+
+  test("the end of a sentence goes when the model is sure it is filler, and the rest stays", async () => {
+    const h = await run({ fillerCutMax: 100 }, ENDS, byKind({}, { "iron ring": 0.9 }));
+    expect(h.body("m2")).toBe("Bram set the kettle on the iron ring. The water began to tick as it warmed.");
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped).toEqual(['"his jaw tight" cut from the end of a sentence as filler, 90% sure']);
+  });
+
+  test("the question about an end names the end and the whole sentence", async () => {
+    const h = await run({}, ENDS, byKind({}, {}));
+    const qs = h.jevCalls[0].body.questions;
+    expect(Object.keys(qs)).toEqual(["s0", "e0", "s1"]);
+    expect(qs.e0.instructions).toBe(
+      'The end of this sentence from `reply` is filler: "his jaw tight"\nThe whole sentence is "Bram set the kettle on the iron ring, his jaw tight."\nFiller is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw. The sentence reads the same without its end.',
+    );
+  });
+
+  test("an end after and or but is asked about too, and needs two words before it", async () => {
+    const h = await run({}, "Bram nodded and his pulse quickened. Coll, eyes wide. The water ticked.", byKind({}, {}));
+    const qs = h.jevCalls[0].body.questions;
+    expect(Object.keys(qs)).toEqual(["s0", "e0", "s1", "s2"]);
+    expect(qs.e0.instructions).toContain('filler: "and his pulse quickened"');
+  });
+
+  test("the panel's built-in questions are the ones the backend sends", async () => {
+    // The panel shows its own copy of each built-in question, so a reader
+    // who never opens the box is still sent the text the box shows.
+    const { FILLER_CHECK, FILLER_END_CHECK } = __testing as any;
+    const h = await run({}, ENDS, byKind({}, {}));
+    const qs = h.jevCalls[0].body.questions;
+    const sentence = JSON.stringify("Bram set the kettle on the iron ring, his jaw tight.");
+    expect(qs.s0.instructions).toBe(FILLER_CHECK.split("{{sentence}}").join(sentence));
+    expect(qs.e0.instructions).toBe(FILLER_END_CHECK.split("{{sentence}}").join(sentence).split("{{end}}").join(JSON.stringify("his jaw tight")));
+  });
+
+  test("an end sure enough to go goes alone, even when the whole sentence is sure enough too", async () => {
+    const h = await run({ fillerCutMax: 100 }, ENDS, byKind({ "iron ring": 0.95 }, { "iron ring": 0.9 }));
+    expect(h.body("m2")).toBe("Bram set the kettle on the iron ring. The water began to tick as it warmed.");
+  });
+
+  test("a sentence sure enough to go goes whole when its end is not", async () => {
+    const h = await run({ fillerCutMax: 100 }, ENDS, byKind({ "iron ring": 0.95 }, { "iron ring": 0.3 }));
+    expect(h.body("m2")).toBe("The water began to tick as it warmed.");
+  });
+
+  // The second example in docs/filler.md, with every setting left as it starts.
+  test("the end example on the docs page", async () => {
+    const reply = "Bram hung his coat by the door, his heart racing. The road outside was empty.";
+    const h = await run({}, reply, byKind({ "coat by the door": 0.45 }, { "his heart racing": 0.72 }));
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["s0", "e0", "s1"]);
+    expect(h.body("m2")).toBe("Bram hung his coat by the door. The road outside was empty.");
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped).toEqual(['"his heart racing" cut from the end of a sentence as filler, 72% sure']);
+  });
+
+  test("an end has its own line, 60 by default", async () => {
+    let h = await run({ fillerCutMax: 100 }, ENDS, byKind({}, { "iron ring": 0.62 }));
+    expect(h.body("m2")).toBe("Bram set the kettle on the iron ring. The water began to tick as it warmed.");
+    h = await run({ fillerCutMax: 100, fillerEndOver: 70 }, ENDS, byKind({}, { "iron ring": 0.62 }));
+    expect(h.body("m2")).toBe(ENDS);
+  });
+
+  test("Trim the end of a sentence off: no end is asked about", async () => {
+    const h = await run({ fillerCutMax: 100, fillerEnds: false }, ENDS, byKind({}, { "iron ring": 0.9 }));
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["s0", "s1"]);
+    expect(h.body("m2")).toBe(ENDS);
+  });
+
+  test("a question of your own about an end without {{end}} has the end added at the end", async () => {
+    const h = await run({ fillerEndCheck: "`end` is padding." }, ENDS, byKind({}, {}));
+    expect(h.jevCalls[0].body.questions.e0.instructions).toBe('`end` is padding.\n"his jaw tight"');
+  });
+
+  test("an end counts toward the limit", async () => {
+    const h = await run({ fillerCutMax: 5 }, ENDS, byKind({}, { "iron ring": 0.9 }));
+    expect(h.body("m2")).toBe(ENDS);
+  });
+
+  test("an end left in by the limit, beside a cut, is named in the Log", async () => {
+    const reply = "Bram set the kettle on the iron ring, his jaw tight. His pulse quickened. The water began to tick as it warmed on the ring.";
+    const h = await run({ fillerCutMax: 20 }, reply, byKind({ "pulse quickened": 0.97 }, { "iron ring": 0.9 }));
+    expect(h.body("m2")).toBe("Bram set the kettle on the iron ring, his jaw tight. The water began to tick as it warmed on the ring.");
+    const said = h.sent.find((x: any) => x.type === "refined");
+    expect(said.swapped).toEqual([
+      '"His pulse quickened." cut as filler, 97% sure',
+      "1 more end of a sentence was left in, so that no more than 20% of the reply is taken out",
+    ]);
   });
 
   test("a title such as Dr. does not end a sentence", async () => {

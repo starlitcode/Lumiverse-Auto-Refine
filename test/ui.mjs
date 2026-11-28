@@ -16972,7 +16972,7 @@ for (const [label, viewport, touch, zoom] of [
   await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page, errors) => {
     await goTab(page, "Limits");
     await settle(page);
-    const rows = ["fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck"];
+    const rows = ["fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck", "fillerEnds", "fillerEndOver", "fillerEndCheck"];
     const seen = async () => {
       const out = {};
       for (const k of rows) out[k] = await onScreen(page, k);
@@ -17014,6 +17014,38 @@ for (const [label, viewport, touch, zoom] of [
       return !!b && !!b.offsetParent && /Use the built-in text/.test(b.textContent);
     });
     ok(label + ": Use the built-in text sits under the question", builtIn);
+    const ends = await page.evaluate(() => {
+      const f = (k) => document.querySelector('#drawer [data-arf-field="' + k + '"]');
+      const b = document.querySelector('#drawer [data-arf-fillerendcheck="builtin"]');
+      return { on: f("fillerEnds").checked, over: f("fillerEndOver").value, check: f("fillerEndCheck").value, builtIn: !!b && !!b.offsetParent && /Use the built-in text/.test(b.textContent) };
+    });
+    ok(label + ": Trim the end of a sentence starts on, at 60% sure", ends.on === true && ends.over === "60", JSON.stringify({ on: ends.on, over: ends.over }));
+    ok(
+      label + ": the question about an end is in its own box, with {{end}} and {{sentence}}, and its own Use the built-in text",
+      /^The end of this sentence from `reply` is filler: \{\{end\}\}\nThe whole sentence is \{\{sentence\}\}\n/.test(ends.check) && ends.builtIn,
+      ends.check.slice(0, 100),
+    );
+    // Turned off, the two rows under it close, and the rest of the card stays.
+    await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-field="fillerEnds"]');
+      box.scrollIntoView({ block: "center" });
+      box.click();
+    });
+    await page.waitForTimeout(500);
+    const endsOff = {
+      over: await onScreen(page, "fillerEndOver"),
+      check: await onScreen(page, "fillerEndCheck"),
+      builtIn: await page.evaluate(() => {
+        const b = document.querySelector('#drawer [data-arf-fillerendcheck="builtin"]');
+        return !!b && !!b.offsetParent;
+      }),
+      sentence: await onScreen(page, "fillerCheck"),
+    };
+    ok(label + ": Trim the end of a sentence off hides its line and its question, and the rest stays", !endsOff.over && !endsOff.check && !endsOff.builtIn && endsOff.sentence, JSON.stringify(endsOff));
+    const endsSaved = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
+    ok(label + ": and that is saved", endsSaved.fillerEnds === false, JSON.stringify({ ends: endsSaved.fillerEnds }));
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-field="fillerEnds"]').click());
+    await page.waitForTimeout(500);
     const saved = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
     ok(label + ": the switch is saved", saved.fillerOn === true && saved.fillerOver === 70 && saved.fillerTalk === true, JSON.stringify({ on: saved.fillerOn, over: saved.fillerOver }));
     // A number typed past its range is held to it when the box is left.

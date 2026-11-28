@@ -157,6 +157,11 @@ Two skills are available. Load them before starting work.
 - Both find sentences with `sentenceAt`. A speech tag after a quote belongs
   to the quote's sentence, and a period after a title such as "Dr." does
   not end one. `docs/swaps.md` says how, under **How a sentence is found**.
+- With `fillerEnds` on, Cut filler also asks about the end of each sentence
+  that has one, found by `fillerEndOf`, the same end a word swap takes. An
+  end at or over `fillerEndOver`, 60 by default, goes alone, even when the
+  whole sentence is also over its line. `docs/filler.md` has the test
+  behind 60, under **Why 60 for an end**.
 - Cut filler's line, `fillerOver`, is 70 by default. It comes from a test
   of jev-latest on made-up replies, and `docs/filler.md` says what the test
   found, under **Why 70**. Measure again before moving it.

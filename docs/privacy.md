@@ -57,6 +57,7 @@ With **Cut filler from each reply** on, each new reply is sent to the Decision c
 
 - the reply, with its thinking taken out
 - one question for each sentence, made from **What it asks about each sentence**, with the sentence in it
+- with **Trim the end of a sentence** on, one question for the end of each sentence that has one, made from **What it asks about the end of a sentence**, with the end and the sentence in it
 
 A sentence with dialogue in it is left out while **Leave dialogue alone** is on, and a sentence with code, a link or a tag is always left out. Nothing else is sent. See [Cut filler](filler.md#what-it-sends).
 

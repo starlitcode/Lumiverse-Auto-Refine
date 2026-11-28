@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.60.0";
+const VERSION = "1.61.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -203,7 +203,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "swaps",
     label: "Word swaps and Cut filler",
     what: "The words and phrases swapped in each reply, and Cut filler. The names already picked in each chat stay on your account and are not in a file.",
-    keys: ["swapOn", "swapAsk", "swapCutMax", "swaps", "fillerOn", "fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck"],
+    keys: ["swapOn", "swapAsk", "swapCutMax", "swaps", "fillerOn", "fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck", "fillerEnds", "fillerEndOver", "fillerEndCheck"],
   },
   {
     id: "switches",
@@ -341,6 +341,12 @@ const WORN_CHECK = "`reply` contains at least one phrase listed in `worn_phrases
 const FILLER_CHECK =
   "This sentence from `reply` is filler: {{sentence}}\n" +
   "Filler is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw, or a line that says again what `reply` already said. `reply` reads the same without it.";
+// What it asks about the end of a sentence, the same text as the backend's.
+// {{end}} is where the end goes and {{sentence}} the whole sentence.
+const FILLER_END_CHECK =
+  "The end of this sentence from `reply` is filler: {{end}}\n" +
+  "The whole sentence is {{sentence}}\n" +
+  "Filler is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw. The sentence reads the same without its end.";
 
 // What the refine model is told before the checks in {{checks_found}}.
 // {{second_model}} becomes the second model's name and {{checks_line}} the
@@ -654,6 +660,12 @@ const CONFIG = {
   fillerCutMax: 30,
   // What it asks about each sentence.
   fillerCheck: FILLER_CHECK,
+  // The end of a sentence is asked about too, and can go on its own.
+  fillerEnds: true,
+  // How sure the Decision model must be, in percent, for an end to go.
+  fillerEndOver: 60,
+  // What it asks about the end of a sentence.
+  fillerEndCheck: FILLER_END_CHECK,
   // Phrases this chat has worn out. Off by default, since it reads the chat's
   // replies. The list goes wherever a block holds {{overused}}.
   wornOn: false,
@@ -2839,6 +2851,36 @@ const FILLER_FIELDS: Field[] = [
     needs: { key: "fillerOn" },
     under: true,
     hint: "{{sentence}} is where each sentence goes. The whole reply is sent with it, named reply.",
+  },
+  {
+    key: "fillerEnds",
+    label: "Trim the end of a sentence",
+    type: "bool",
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: 'On by default. The part after the last comma, dash, "and" or "but" in a sentence can go on its own.',
+  },
+  {
+    key: "fillerEndOver",
+    int: true,
+    label: "Cut an end when it is at least this sure (%)",
+    type: "num",
+    min: 1,
+    max: 100,
+    needs: { key: "fillerOn" },
+    also: { key: "fillerEnds" },
+    under: true,
+    hint: "60 by default. An end that is sure enough goes alone, even when the whole sentence is sure enough too.",
+  },
+  {
+    key: "fillerEndCheck",
+    label: "What it asks about the end of a sentence",
+    type: "lines",
+    rows: 5,
+    needs: { key: "fillerOn" },
+    also: { key: "fillerEnds" },
+    under: true,
+    hint: "{{end}} is where the end goes, and {{sentence}} is the whole sentence.",
   },
 ];
 
@@ -12229,8 +12271,16 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "Off by default. On, each new reply's sentences go to your Decision model in one call, which costs one Decision call per reply.",
       }),
     );
-    for (const f of FILLER_FIELDS) wrap.appendChild(fieldRow(f));
-    wrap.appendChild(builtInRow("fillerCheck", FILLER_CHECK, "What it asks about each sentence", "fillercheck", () => !!cfg.fillerOn));
+    for (const f of FILLER_FIELDS) {
+      wrap.appendChild(fieldRow(f));
+      // Each question's button for the built-in text sits straight under its box.
+      if (f.key === "fillerCheck")
+        wrap.appendChild(builtInRow("fillerCheck", FILLER_CHECK, "What it asks about each sentence", "fillercheck", () => !!cfg.fillerOn));
+      if (f.key === "fillerEndCheck")
+        wrap.appendChild(
+          builtInRow("fillerEndCheck", FILLER_END_CHECK, "What it asks about the end of a sentence", "fillerendcheck", () => !!cfg.fillerOn && !!cfg.fillerEnds),
+        );
+    }
     const where = note("It asks through Which Decision connection, on the Model tab, or your default Decision connection. The Log shows each cut and how sure it was.");
     where.setAttribute("data-arf-filler-where", "1");
     wrap.appendChild(hangsOff(where, "fillerOn", "filler connection note"));
@@ -19739,6 +19789,8 @@ export const __testing = {
   COST_FIELDS,
   LIMIT_FIELDS,
   FILLER_FIELDS,
+  FILLER_CHECK,
+  FILLER_END_CHECK,
   MACROS,
   BUILT_IN_PROMPTS,
   DEFAULT_BLOCKS,

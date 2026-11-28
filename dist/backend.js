@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.60.0';
+const VERSION = '1.61.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -6632,7 +6632,9 @@ function swapWords(text, rules, pick, cutMax = 100) {
 // Cut filler asks the reader's Decision model about each sentence of a reply,
 // in one call, and takes out the sentences it is sure enough are filler. It
 // writes nothing of its own: a sentence is kept or taken out whole, the same
-// way a word swap takes out a whole sentence.
+// way a word swap takes out a whole sentence. With Trim the end of a sentence
+// on, it also asks about the end of each sentence that has one, and can take
+// out just that end, the same end a word swap takes.
 let fillerOn = false;
 // How sure the Decision model must be, in percent, for a sentence to go.
 // jev-latest gives filler 65% to 92%, mostly in the 70s, and few other
@@ -6648,9 +6650,19 @@ let fillerCutMax = 30;
 // Cut filler's cuts wait for a yes, the same way Ask before swapping holds
 // word swaps.
 let fillerAsk = false;
+// The end of a sentence is asked about too.
+let fillerEnds = true;
+// How sure the model must be, in percent, for the end of a sentence to go.
+// It is lower than fillerOver: jev-latest gives a filler end 64% to 78%, and
+// an end that says what happens 55% at most.
+let fillerEndOver = 60;
+// The reader's own wording for the question about an end. Null leaves
+// FILLER_END_CHECK in use.
+let fillerEndCheck = null;
 // The sentences asked about in one call. Lumiverse takes up to 256
-// questions, and each one repeats its sentence, so a very long reply has its
-// first ones asked about and the Log says how many were left.
+// questions, a sentence and its end are two, and each one repeats its
+// sentence, so a very long reply has its first ones asked about and the Log
+// says how many were left.
 const FILLER_SENTENCES_MAX = 120;
 // The question asked about each sentence when the reader has not written
 // their own. The same text as the panel's box. {{sentence}} is where each
@@ -6661,6 +6673,35 @@ const FILLER_CHECK = 'This sentence from `reply` is filler: {{sentence}}\n' +
 function fillerQuestion(check, sentence) {
     const quoted = JSON.stringify(sentence);
     return check.indexOf('{{sentence}}') >= 0 ? check.split('{{sentence}}').join(quoted) : check + '\n' + quoted;
+}
+// The question asked about the end of a sentence when the reader has not
+// written their own. The same text as the panel's box. {{end}} is where the
+// end goes and {{sentence}} the whole sentence, each in quotation marks. A
+// question without {{end}} has the end added on a line of its own.
+const FILLER_END_CHECK = 'The end of this sentence from `reply` is filler: {{end}}\n' +
+    'The whole sentence is {{sentence}}\n' +
+    'Filler is a stock line about a body, a look or a pause, such as a held breath, a racing pulse or a tight jaw. The sentence reads the same without its end.';
+function fillerEndQuestion(check, sentence, end) {
+    const s = JSON.stringify(sentence);
+    const e = JSON.stringify(end);
+    // One pass, so a sentence that holds the text {{end}} is not filled in again.
+    const q = check.replace(/\{\{(sentence|end)\}\}/g, (_m, k) => (k === 'end' ? e : s));
+    return check.indexOf('{{end}}') >= 0 ? q : q + '\n' + e;
+}
+// The end of a sentence Cut filler may ask about: from the last comma,
+// semicolon, dash, "and" or "but" to the last word, when at least two words
+// come before it. It is the end a word swap takes with The end of the
+// sentence. Null when the sentence has no such end.
+function fillerEndOf(text, s) {
+    const body = text.slice(s.start, s.end);
+    const re = /[\p{L}\p{N}]+/gu;
+    let last = null;
+    for (let m = re.exec(body); m; m = re.exec(body))
+        last = m;
+    if (!last)
+        return null;
+    const word = { start: s.start + last.index, end: s.start + last.index + last[0].length };
+    return sentenceEnd(text, s, word);
 }
 // The reasons Cut filler could not ask that each account was already warned of.
 const fillerTold = new Map();
@@ -6727,7 +6768,11 @@ async function fillerCut(text, userId) {
             left++;
             continue;
         }
-        asked.push({ ...s, id: 's' + asked.length });
+        const one = { ...s, id: 's' + asked.length };
+        const tail = fillerEnds ? fillerEndOf(out0, s) : null;
+        if (tail)
+            one.tail = { ...tail, id: 'e' + asked.length };
+        asked.push(one);
     }
     if (left)
         say('info', left + ' sentences at the end of a long reply were not asked about by Cut filler');
@@ -6735,24 +6780,34 @@ async function fillerCut(text, userId) {
     if (asked.length < 2)
         return none;
     const check = (fillerCheck == null ? FILLER_CHECK : fillerCheck).trim() || FILLER_CHECK;
+    const endCheck = (fillerEndCheck == null ? FILLER_END_CHECK : fillerEndCheck).trim() || FILLER_END_CHECK;
+    // The words of an end, without the comma, dash or space in front of them.
+    const endWords = (t) => swapUnmask(out0.slice(t.start, t.end), masked.parts).replace(/^[\s,;\u2014\u2013]+/u, '');
     const questions = {};
-    for (const a of asked)
-        questions[a.id] = {
-            type: NOUL,
-            instructions: fillerQuestion(check, swapUnmask(out0.slice(a.start, a.end), masked.parts)),
-        };
+    for (const a of asked) {
+        const sentence = swapUnmask(out0.slice(a.start, a.end), masked.parts);
+        questions[a.id] = { type: NOUL, instructions: fillerQuestion(check, sentence) };
+        if (a.tail)
+            questions[a.tail.id] = { type: NOUL, instructions: fillerEndQuestion(endCheck, sentence, endWords(a.tail)) };
+    }
     const got = await askJev(userId, { reply: String(text).slice(0, JEV_REPLY_MAX) }, questions);
     if (got.error)
         return trouble('Cut filler could not ask the Decision model, so the reply was left as it was: ' + got.error);
+    const pctOf = (id) => {
+        const ans = got.answers && got.answers[id];
+        const p = Number(ans && ans.noul);
+        return Number.isFinite(p) ? Math.round(Math.max(0, Math.min(1, p)) * 100) : null;
+    };
     const scored = [];
     for (const a of asked) {
-        const ans = got.answers && got.answers[a.id];
-        const p = Number(ans && ans.noul);
-        if (!Number.isFinite(p))
+        const tp = a.tail ? pctOf(a.tail.id) : null;
+        if (a.tail && tp != null && tp >= fillerEndOver) {
+            scored.push({ start: a.tail.start, end: a.tail.end, pct: tp, tail: true });
             continue;
-        const pct = Math.round(Math.max(0, Math.min(1, p)) * 100);
-        if (pct >= fillerOver)
-            scored.push({ start: a.start, end: a.end, pct: pct });
+        }
+        const pct = pctOf(a.id);
+        if (pct != null && pct >= fillerOver)
+            scored.push({ ...wholeSentence(out0, a), pct: pct, tail: false });
     }
     if (!scored.length) {
         say('info', 'Cut filler asked about ' + asked.length + ' sentences and found none at or over ' + fillerOver + '%');
@@ -6762,25 +6817,41 @@ async function fillerCut(text, userId) {
     const budget = Math.floor((inkOf(String(text)) * fillerCutMax) / 100);
     let spent = 0;
     let held = 0;
+    let heldEnds = 0;
     const taken = [];
     for (const c of scored.slice().sort((x, y) => y.pct - x.pct || x.start - y.start)) {
-        const r = wholeSentence(out0, c);
-        const cost = inkOf(out0.slice(r.start, r.end));
+        const cost = inkOf(out0.slice(c.start, c.end));
         if (spent + cost > budget) {
-            held++;
+            if (c.tail)
+                heldEnds++;
+            else
+                held++;
             continue;
         }
         spent += cost;
-        taken.push({ ...r, pct: c.pct });
+        taken.push(c);
     }
+    // "1 sentence and 2 ends of sentences", or with "more" after the first
+    // number: "1 more sentence and 2 ends of sentences".
+    const keptIn = (more) => {
+        const parts = [];
+        const m = more ? ' more' : '';
+        if (held)
+            parts.push(held + m + (held === 1 ? ' sentence' : ' sentences'));
+        if (heldEnds)
+            parts.push(heldEnds + (held ? '' : m) + (heldEnds === 1 ? ' end of a sentence' : ' ends of sentences'));
+        return parts.join(' and ');
+    };
     if (!taken.length) {
-        say('info', 'Cut filler left ' + held + (held === 1 ? ' sentence' : ' sentences') + ' in, so that no more than ' + fillerCutMax + '% of the reply is taken out');
+        say('info', 'Cut filler left ' + keptIn(false) + ' in, so that no more than ' + fillerCutMax + '% of the reply is taken out');
         return none;
     }
     taken.sort((x, y) => x.start - y.start);
-    const said = taken.map((c) => '"' + swapUnmask(out0.slice(c.start, c.end), masked.parts).replace(/\s+/g, ' ').trim() + '" cut as filler, ' + c.pct + '% sure');
-    if (held)
-        said.push(held + (held === 1 ? ' more sentence was' : ' more sentences were') + ' left in, so that no more than ' + fillerCutMax + '% of the reply is taken out');
+    const said = taken.map((c) => c.tail
+        ? '"' + endWords(c).replace(/\s+/g, ' ').trim() + '" cut from the end of a sentence as filler, ' + c.pct + '% sure'
+        : '"' + swapUnmask(out0.slice(c.start, c.end), masked.parts).replace(/\s+/g, ' ').trim() + '" cut as filler, ' + c.pct + '% sure');
+    if (held || heldEnds)
+        said.push(keptIn(true) + (held + heldEnds === 1 ? ' was' : ' were') + ' left in, so that no more than ' + fillerCutMax + '% of the reply is taken out');
     let out = out0;
     for (const c of taken.slice().reverse())
         out = cutOut(out, c.start, c.end);
@@ -7822,6 +7893,10 @@ function applyRules(s) {
     fillerAsk = s.fillerAsk === true;
     fillerTalk = s.fillerTalk !== false;
     fillerCheck = typeof s.fillerCheck === 'string' ? s.fillerCheck.trim().slice(0, 1000) : null;
+    fillerEnds = s.fillerEnds !== false;
+    fillerEndOver = Number(s.fillerEndOver);
+    fillerEndOver = Number.isFinite(fillerEndOver) ? Math.max(1, Math.min(100, Math.round(fillerEndOver))) : 60;
+    fillerEndCheck = typeof s.fillerEndCheck === 'string' ? s.fillerEndCheck.trim().slice(0, 1000) : null;
     fillerOver = Number(s.fillerOver);
     fillerOver = Number.isFinite(fillerOver) ? Math.max(1, Math.min(100, Math.round(fillerOver))) : 70;
     fillerCutMax = Number(s.fillerCutMax);
