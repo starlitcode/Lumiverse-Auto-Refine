@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.59.0';
+const VERSION = '1.60.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -6365,6 +6365,30 @@ const TALK_MARKS = /["\u201c\u201d\u00ab\u00bb]/;
 // A sentence ends at a run of . ! ? or an ellipsis, with any closing
 // quotes, brackets or markup after it, before a space or the end of the line.
 const SENTENCE_END = /[.!?\u2026]+["'\u201d\u2019\u00bb*_)\]]*(?=\s|$)/gu;
+// A title before a name, and a short form such as "e.g.". The period after
+// one of them does not end the sentence, so "Dr. Vance" stays whole.
+const NOT_AN_END = /(?:^|[^\p{L}])(?:Mr|Mrs|Ms|Mx|Dr|Prof|St|Sgt|Capt|Lt|Col|Gen|Rev|Fr|e\.g|i\.e)\.$/u;
+// A word for speaking, in a speech tag such as "Ines asked."
+const SPEECH_WORD = /\b(?:say|says|said|ask|asks|asked|repl(?:y|ies|ied)|answer(?:s|ed)?|whisper(?:s|ed)?|shout(?:s|ed)?|call(?:s|ed)?|cr(?:y|ies|ied)|mutter(?:s|ed)?|murmur(?:s|ed)?|add(?:s|ed)?|yell(?:s|ed)?|snap(?:s|ped)?|tell|tells|told)\b/i;
+// Whether the end found at m in a line really ends a sentence. A period
+// after a title does not. Nor does an end inside closing quotation marks
+// with a speech tag after it, since the tag belongs to the quote: "Is it
+// open?" asked Ines. A tag starts with a small letter, or is up to four
+// words with a word for speaking in them.
+function endsSentence(line, m) {
+    if (m[0] === '.' && NOT_AN_END.test(line.slice(0, m.index + 1)))
+        return false;
+    if (!/[.!?\u2026]["'\u201d\u2019\u00bb]/u.test(m[0]))
+        return true;
+    const rest = line.slice(m.index + m[0].length).replace(/^\s+/, '');
+    if (/^\p{Ll}/u.test(rest))
+        return false;
+    const next = new RegExp(SENTENCE_END.source, 'u').exec(rest);
+    const tag = next ? rest.slice(0, next.index + next[0].length) : rest;
+    if (/["\u201c\u201d\u00ab\u00bb]/.test(tag))
+        return true;
+    return (tag.match(/[\p{L}\p{N}]+/gu) || []).length > 4 || !SPEECH_WORD.test(tag);
+}
 // The sentence around a place in the text, on its own line, without the
 // spaces at either end.
 function sentenceAt(text, at) {
@@ -6377,6 +6401,8 @@ function sentenceAt(text, at) {
     let to = line.length;
     SENTENCE_END.lastIndex = 0;
     for (let m = SENTENCE_END.exec(line); m; m = SENTENCE_END.exec(line)) {
+        if (!endsSentence(line, m))
+            continue;
         const stop = m.index + m[0].length;
         if (lineStart + stop > at) {
             to = stop;
@@ -6609,7 +6635,9 @@ function swapWords(text, rules, pick, cutMax = 100) {
 // way a word swap takes out a whole sentence.
 let fillerOn = false;
 // How sure the Decision model must be, in percent, for a sentence to go.
-let fillerOver = 90;
+// jev-latest gives filler 65% to 92%, mostly in the 70s, and few other
+// sentences more than 70%.
+let fillerOver = 70;
 // The reader's own wording for the question. Null until the panel sends it,
 // which leaves FILLER_CHECK in use.
 let fillerCheck = null;
@@ -7795,7 +7823,7 @@ function applyRules(s) {
     fillerTalk = s.fillerTalk !== false;
     fillerCheck = typeof s.fillerCheck === 'string' ? s.fillerCheck.trim().slice(0, 1000) : null;
     fillerOver = Number(s.fillerOver);
-    fillerOver = Number.isFinite(fillerOver) ? Math.max(1, Math.min(100, Math.round(fillerOver))) : 90;
+    fillerOver = Number.isFinite(fillerOver) ? Math.max(1, Math.min(100, Math.round(fillerOver))) : 70;
     fillerCutMax = Number(s.fillerCutMax);
     fillerCutMax = Number.isFinite(fillerCutMax) ? Math.max(1, Math.min(100, Math.round(fillerCutMax))) : 30;
     swapCutMax = Number(s.swapCutMax);

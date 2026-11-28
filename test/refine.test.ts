@@ -9569,6 +9569,32 @@ describe("Cut filler", () => {
     expect(h.jevCalls.length).toBe(0);
     expect(h.body("m2")).toBe(REPLY);
   });
+
+  // The sentences a reply was split into, as the questions name them.
+  const askedAbout = (h: any): string[] =>
+    Object.values(h.jevCalls[0].body.questions).map((q: any) => JSON.parse(String(q.instructions).match(/filler: ("(?:[^"\\]|\\.)*")/)![1]));
+  const allSure = () => (_u: string, init: any) => {
+    const answers: Record<string, any> = {};
+    for (const id of Object.keys(JSON.parse(init.body).questions)) answers[id] = { type: "noul", noul: 0.99 };
+    return { status: 200, body: JSON.stringify({ answers }) };
+  };
+
+  test("a speech tag belongs to its quote, so it is never asked about or cut", async () => {
+    const reply = 'Bram lit the stove. "Is the kettle on?" asked Coll. "Is it hot yet?" Coll asked. His pulse quickened.';
+    const h = await run({ fillerCutMax: 100, fillerOver: 50 }, reply, allSure());
+    expect(askedAbout(h)).toEqual(["Bram lit the stove.", "His pulse quickened."]);
+    expect(h.body("m2")).toBe('"Is the kettle on?" asked Coll. "Is it hot yet?" Coll asked.');
+  });
+
+  test("a sentence of its own after a quote is still asked about", async () => {
+    const h = await run({}, '"Is the kettle on?" Coll lit the stove under it. A long moment passed.');
+    expect(askedAbout(h)).toEqual(["Coll lit the stove under it.", "A long moment passed."]);
+  });
+
+  test("a title such as Dr. does not end a sentence", async () => {
+    const h = await run({}, "Dr. Vance lit the stove for Mrs. Ash, e.g. the small one. A long moment passed.");
+    expect(askedAbout(h)).toEqual(["Dr. Vance lit the stove for Mrs. Ash, e.g. the small one.", "A long moment passed."]);
+  });
 });
 
 // Swaps with nothing to put instead can take out the whole sentence, or the
@@ -9593,6 +9619,12 @@ describe("word swaps that take out a sentence or its end", () => {
   test("the whole sentence goes, with the space before it", async () => {
     const h = await run("Tamsin coiled the rope. Her pulse skipped a beat. She looked at the water.", whole("pulse skipped a beat"));
     expect(h.body("m2")).toBe("Tamsin coiled the rope. She looked at the water.");
+  });
+
+  test("a speech tag belongs to its quote, so a whole-sentence cut leaves it", async () => {
+    const reply = '"Is the rope dry?" asked Tamsin. She coiled it.';
+    const h = await run(reply, whole("asked Tamsin"));
+    expect(h.body("m2")).toBe(reply);
   });
 
   test("a sentence at the start of a line takes the space after it", async () => {

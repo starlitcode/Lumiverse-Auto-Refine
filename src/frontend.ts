@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.59.0";
+const VERSION = "1.60.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -647,7 +647,7 @@ const CONFIG = {
   // Ask before cutting: the cuts wait for a yes. Off by default.
   fillerAsk: false,
   // How sure the Decision model must be, in percent.
-  fillerOver: 90,
+  fillerOver: 70,
   // Sentences with dialogue are not asked about. On by default.
   fillerTalk: true,
   // The most of a reply, in percent, it may take out.
@@ -2231,6 +2231,14 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
     why: "the default is now Low instead of Medium. Low is enough for a rewrite, and a higher level takes longer and costs more.",
     needs: { key: "thinkingMode", is: "custom" },
   },
+  {
+    key: "fillerOver",
+    // 1.59.0 started at 90.
+    was: 90,
+    label: "Cut when it is at least this sure (%)",
+    why: "the default is now 70 instead of 90. In a test with jev-latest, filler scored from 65% to 92%, so at 90 almost nothing was cut.",
+    needs: { key: "fillerOn", is: true },
+  },
 ];
 
 // What a reader is marked with once told about a row: its setting and a mark
@@ -2780,6 +2788,57 @@ const COST_FIELDS: Field[] = [
     min: 0,
     max: 10000,
     hint: "Your provider's output price per million tokens, for the text the model writes. Type the number, or paste the whole line.",
+  },
+];
+
+// The rows under Cut filler from each reply, on the Limits tab.
+const FILLER_FIELDS: Field[] = [
+  {
+    key: "fillerAsk",
+    label: "Ask before cutting",
+    type: "bool",
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: "Off by default. On, the cuts wait for your yes, the same way Ask before saving a refine does.",
+  },
+  {
+    key: "fillerOver",
+    int: true,
+    label: "Cut when it is at least this sure (%)",
+    type: "num",
+    min: 1,
+    max: 100,
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: "70 by default. Lower cuts more sentences, and more of them by mistake.",
+  },
+  {
+    key: "fillerTalk",
+    label: "Leave dialogue alone",
+    type: "bool",
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: "On by default. A sentence with dialogue in it is not sent or cut.",
+  },
+  {
+    key: "fillerCutMax",
+    int: true,
+    label: "Most of a reply it may take out (%)",
+    type: "num",
+    min: 1,
+    max: 100,
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: "30 by default. The surest sentences go first. A reply is never emptied.",
+  },
+  {
+    key: "fillerCheck",
+    label: "What it asks about each sentence",
+    type: "lines",
+    rows: 5,
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: "{{sentence}} is where each sentence goes. The whole reply is sent with it, named reply.",
   },
 ];
 
@@ -12170,56 +12229,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "Off by default. On, each new reply's sentences go to your Decision model in one call, which costs one Decision call per reply.",
       }),
     );
-    const under: Field[] = [
-      {
-        key: "fillerAsk",
-        label: "Ask before cutting",
-        type: "bool",
-        needs: { key: "fillerOn" },
-        under: true,
-        hint: "Off by default. On, the cuts wait for your yes, the same way Ask before saving a refine does.",
-      },
-      {
-        key: "fillerOver",
-        int: true,
-        label: "Cut when it is at least this sure (%)",
-        type: "num",
-        min: 1,
-        max: 100,
-        needs: { key: "fillerOn" },
-        under: true,
-        hint: "90 by default. Lower cuts more sentences, and more of them by mistake.",
-      },
-      {
-        key: "fillerTalk",
-        label: "Leave dialogue alone",
-        type: "bool",
-        needs: { key: "fillerOn" },
-        under: true,
-        hint: "On by default. A sentence with dialogue in it is not sent or cut.",
-      },
-      {
-        key: "fillerCutMax",
-        int: true,
-        label: "Most of a reply it may take out (%)",
-        type: "num",
-        min: 1,
-        max: 100,
-        needs: { key: "fillerOn" },
-        under: true,
-        hint: "30 by default. The surest sentences go first. A reply is never emptied.",
-      },
-      {
-        key: "fillerCheck",
-        label: "What it asks about each sentence",
-        type: "lines",
-        rows: 5,
-        needs: { key: "fillerOn" },
-        under: true,
-        hint: "{{sentence}} is where each sentence goes. The whole reply is sent with it, named reply.",
-      },
-    ];
-    for (const f of under) wrap.appendChild(fieldRow(f));
+    for (const f of FILLER_FIELDS) wrap.appendChild(fieldRow(f));
     wrap.appendChild(builtInRow("fillerCheck", FILLER_CHECK, "What it asks about each sentence", "fillercheck", () => !!cfg.fillerOn));
     const where = note("It asks through Which Decision connection, on the Model tab, or your default Decision connection. The Log shows each cut and how sure it was.");
     where.setAttribute("data-arf-filler-where", "1");
@@ -19728,6 +19738,7 @@ export const __testing = {
   PROTECT_NOTE,
   COST_FIELDS,
   LIMIT_FIELDS,
+  FILLER_FIELDS,
   MACROS,
   BUILT_IN_PROMPTS,
   DEFAULT_BLOCKS,

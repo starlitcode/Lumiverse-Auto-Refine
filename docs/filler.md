@@ -16,7 +16,7 @@
 2. Make sure Auto Refine has the **Decision models** permission, under Extensions in Lumiverse.
 3. Open the **Limits** tab and find the **Cut filler** card.
 4. Switch on **Cut filler from each reply**.
-5. Leave **Cut when it is at least this sure (%)** at 90 to start. A lower number cuts more sentences, and more of them by mistake.
+5. Leave **Cut when it is at least this sure (%)** at 70 to start. A lower number cuts more sentences, and more of them by mistake.
 6. To use a Decision connection other than your default one, pick it under **Which Decision connection**, on the **Model** tab. It shows while Cut filler is on.
 7. To see each reply's cuts before they are saved, turn on **Ask before cutting**.
 8. The next reply is checked. The Log shows each sentence that was cut, and how sure the model was.
@@ -62,7 +62,7 @@ Auto Refine sends the reply and four questions, one for each sentence, in one ca
 | The kettle ticked as it warmed on the iron ring. | 10% |
 | A long moment passed. | 93% |
 
-Two sentences are at or over 90%. Together they are more than 30% of the reply, so only the surest one goes. The reply is saved as:
+Two sentences are at or over 70%. Together they are more than 30% of the reply, so only the surest one goes. The reply is saved as:
 
 > Bram lit the stove in the cold kitchen. The kettle ticked as it warmed on the iron ring. A long moment passed.
 
@@ -80,10 +80,22 @@ All of these are under **Cut filler from each reply**, and show only while it is
 | Setting | Starts at | What it does |
 | --- | --- | --- |
 | **Ask before cutting** | Off | The cuts wait for your yes, the same way **Ask before saving a refine** holds a refine. |
-| **Cut when it is at least this sure (%)** | 90 | A sentence goes when the model is at least this sure it is filler. From 1 to 100. |
+| **Cut when it is at least this sure (%)** | 70 | A sentence goes when the model is at least this sure it is filler. From 1 to 100. |
 | **Leave dialogue alone** | On | A sentence with dialogue in it is not sent or cut. |
 | **Most of a reply it may take out (%)** | 30 | The surest sentences go first, while they fit under this. From 1 to 100. |
 | **What it asks about each sentence** | The built-in text | The question sent for each sentence. **Use the built-in text** puts the built-in one back. |
+
+## Why 70
+
+70 comes from a test with jev-latest on 50 made-up replies, about 200 sentences.
+
+- The filler sentences scored from 65% to 92%. Most scored in the 70s.
+- The other sentences scored 72% at most.
+- At 90, 1 of the 48 filler sentences was cut.
+- At 70, 32 to 34 were cut, over three runs. No sentence that was not filler was cut.
+- One sentence that was not filler scored 72%. **Most of a reply it may take out (%)** kept it in, since the surest sentences go first.
+
+Another Decision model can score the same sentences higher or lower. If it cuts too little, lower the number. If it cuts sentences you want, raise it.
 
 ## When it runs
 
@@ -121,7 +133,7 @@ The Decision model can be sure about a sentence that mattered.
 ## Limits
 
 - A reply with only one sentence is not sent. A reply is never emptied.
-- A sentence is found by its end: a period, a question mark, an exclamation mark or an ellipsis, before a space or the end of a line. A title such as "Dr." can end a sentence early.
+- A sentence is found by its end: a period, a question mark, an exclamation mark or an ellipsis, before a space or the end of a line. See [How a sentence is found](swaps.md#how-a-sentence-is-found).
 - Up to 120 sentences of a reply are asked about. The rest of a longer reply is left as it is, and the Log says how many.
 - With [Two models](two-models.md) on as well, a reply has two Decision calls: one to decide whether to refine it, and one for Cut filler.
 

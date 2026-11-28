@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.60.0
+
+_2026-11-27_
+
+### Changed
+
+- **Cut filler cuts at 70% by default instead of 90%.** In a test with jev-latest on 50 made-up replies, filler scored from 65% to 92%. At 90, 1 of 48 filler sentences was cut. At 70, 32 to 34 were cut, and no sentence that was not filler. If **Cut when it is at least this sure (%)** is still at 90, the panel offers the new number. See [Why 70](docs/filler.md#why-70).
+
+### Fixed
+
+- **A speech tag stays with its quote.** In `"Is the rope dry?" asked Tamsin.`, "asked Tamsin." was read as a sentence of its own. Cut filler could cut it, and so could a word swap that takes out the whole sentence, which left the quote with no speaker. The tag now belongs to the quote's sentence, so neither takes it out while it holds dialogue. See [How a sentence is found](docs/swaps.md#how-a-sentence-is-found).
+- **A title such as "Dr." no longer ends a sentence.** "Dr. Vance lit the stove." was read as two sentences, "Dr." and "Vance lit the stove." A period after a title such as Mr., Mrs. or Dr., or after e.g. or i.e., is now part of the sentence. This affects Cut filler and the word swaps that take out a sentence or its end.
+
+---
+
 ## 1.59.0
 
 _2026-11-27_
@@ -758,7 +773,7 @@ _2026-10-15_
 
 - **Clef Omni.** A third choice under **Which Clef**: Cloudflare's Clef that also reads pictures and sound. Auto Refine sends it text only, the same as the others. It is on OpenRouter, NanoGPT and Cloudflare, and has its own **Refine when a check reaches**, 30 by default.
 
-- **More checks you can add.** A fold under **What the second model checks** holds eight more checks for stock writing, such as a feeling put into the body as if it were an object, or three or more gestures shrunk with "small", "slight" or "faint". None is sent until you press **Add them to the checks**, which adds the ones your box does not hold. See [More checks you can add](docs/two-models.md#more-checks-you-can-add).
+- **More checks you can add.** A fold under **What the second model checks** holds eight more checks for stock writing, such as a feeling put into the body as if it were an object, or three or more gestures shrunk with "small", "slight" or "faint". None is sent until you press **Add them to the checks**, which adds the ones your box does not hold. See [Two models](docs/two-models.md).
 
 ### Changed
 

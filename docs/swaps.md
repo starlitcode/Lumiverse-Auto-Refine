@@ -89,7 +89,7 @@ A swap with nothing under **Put instead** takes the words out, and tidies what i
 
 **What to take out** shows when **Put instead** is empty. It has three choices.
 
-- **Only the words**, the default. The words are taken out, as in [Taking out words](#taking-out-words).
+- **Only the words**, the default. The words are taken out, as in [Taking out words](#taking-words-out).
 - **The end of the sentence.** The words go, and so does the part of the sentence before them, back to the last comma, semicolon, dash, "and" or "but". "Tamsin leaned on the post, knuckles white." becomes "Tamsin leaned on the post."
 - **The whole sentence.** The sentence that holds the words goes. "Her pulse skipped a beat." is taken out whole, with the space next to it.
 
@@ -195,10 +195,22 @@ Swaps are not made:
 - A swap made on its own does not bring up a card or a notification, since a list of swaps can change most replies. The Log says what was swapped.
 - A swap is never added as a swipe, even with **Add the refine as a swipe instead of writing over the reply** on.
 
+## How a sentence is found
+
+Word swaps and [Cut filler](filler.md) find sentences the same way.
+
+- A sentence ends at a period, a question mark, an exclamation mark or an ellipsis, before a space or the end of a line. Closing quotation marks, brackets and markup after it belong to it.
+- A line break always ends a sentence.
+- A period after a title or a short form does not end a sentence. These are Mr., Mrs., Ms., Mx., Dr., Prof., St., Sgt., Capt., Lt., Col., Gen., Rev., Fr., e.g. and i.e.
+- A speech tag after a quote belongs to the quote's sentence. A tag starts with a small letter, or has up to four words with a word for speaking in them, such as "Tamsin asked."
+- A new sentence after a quote is a sentence of its own.
+
+For example, `"Is the rope dry?" asked Tamsin.` is one sentence. It holds dialogue, so a cut of the whole sentence leaves it. In `"Is the rope dry?" Tamsin coiled it on the post.`, "Tamsin coiled it on the post." is a sentence of its own.
+
 ## Limits
 
 - Up to 100 swaps, each with up to 30 words to find and 40 choices.
-- A sentence is found by its end: a period, a question mark, an exclamation mark or an ellipsis, before a space or the end of a line. A title such as "Dr." can end a sentence early.
+- A sentence is found by its end: a period, a question mark, an exclamation mark or an ellipsis, before a space or the end of a line. See [How a sentence is found](#how-a-sentence-is-found).
 - A swap does not change the form of a word. "jolted" is not turned into "shivered". Add the forms you want as their own swaps.
 - A swap does not read what a sentence means. A name swapped in one chat is also swapped in a sentence that uses the same word for something else.
 - The picks for up to 300 chats are kept, and up to 300 found words in each. The oldest chat is dropped first.

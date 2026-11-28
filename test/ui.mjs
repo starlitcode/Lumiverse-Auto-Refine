@@ -17004,8 +17004,8 @@ for (const [label, viewport, touch, zoom] of [
       return { over: f("fillerOver").value, max: f("fillerCutMax").value, talk: f("fillerTalk").checked, ask: f("fillerAsk").checked, check: f("fillerCheck").value };
     });
     ok(
-      label + ": it starts at 90% sure, 30% of a reply, dialogue left alone, and no asking first",
-      vals.over === "90" && vals.max === "30" && vals.talk === true && vals.ask === false,
+      label + ": it starts at 70% sure, 30% of a reply, dialogue left alone, and no asking first",
+      vals.over === "70" && vals.max === "30" && vals.talk === true && vals.ask === false,
       JSON.stringify(vals),
     );
     ok(label + ": the question it sends is in the box, with {{sentence}} where each sentence goes", /^This sentence from `reply` is filler: \{\{sentence\}\}\n/.test(vals.check), vals.check.slice(0, 80));
@@ -17015,7 +17015,7 @@ for (const [label, viewport, touch, zoom] of [
     });
     ok(label + ": Use the built-in text sits under the question", builtIn);
     const saved = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
-    ok(label + ": the switch is saved", saved.fillerOn === true && saved.fillerOver === 90 && saved.fillerTalk === true, JSON.stringify({ on: saved.fillerOn, over: saved.fillerOver }));
+    ok(label + ": the switch is saved", saved.fillerOn === true && saved.fillerOver === 70 && saved.fillerTalk === true, JSON.stringify({ on: saved.fillerOn, over: saved.fillerOver }));
     // A number typed past its range is held to it when the box is left.
     await page.evaluate(() => {
       const box = document.querySelector('#drawer [data-arf-field="fillerOver"]');

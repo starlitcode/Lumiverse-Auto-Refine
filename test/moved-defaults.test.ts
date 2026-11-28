@@ -8,7 +8,7 @@
 import { expect, test, describe } from "bun:test";
 import { __testing } from "../src/frontend";
 
-const { CONFIG, MOVED_DEFAULTS, LIMIT_FIELDS, COST_FIELDS, SAMPLER_FIELDS, JUDGE_FIELDS, PROTECT_NOTE_FIELD } = __testing as any;
+const { CONFIG, MOVED_DEFAULTS, LIMIT_FIELDS, FILLER_FIELDS, COST_FIELDS, SAMPLER_FIELDS, JUDGE_FIELDS, PROTECT_NOTE_FIELD } = __testing as any;
 
 describe("the defaults said to have moved", () => {
   test("there is a table to check, or this proves nothing", () => {
@@ -33,7 +33,7 @@ describe("the defaults said to have moved", () => {
     // The swipe selector's row is built by hand under its switch, and takes
     // its label from SWIPE_LABEL.
     const { SWIPE_LABEL } = __testing as any;
-    const labels = [...LIMIT_FIELDS, ...COST_FIELDS, ...SAMPLER_FIELDS, ...JUDGE_FIELDS, PROTECT_NOTE_FIELD].map((f: any) =>
+    const labels = [...LIMIT_FIELDS, ...FILLER_FIELDS, ...COST_FIELDS, ...SAMPLER_FIELDS, ...JUDGE_FIELDS, PROTECT_NOTE_FIELD].map((f: any) =>
       String(f.label || ""),
     ).concat([SWIPE_LABEL]);
     for (const m of MOVED_DEFAULTS)

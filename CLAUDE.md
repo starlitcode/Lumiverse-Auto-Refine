@@ -154,6 +154,12 @@ Two skills are available. Load them before starting work.
   built-in text** to go back. Nothing else is sent with it but the reply.
 - A whole sentence is never taken out when it holds dialogue, code, a link
   or a tag. A reply is never emptied.
+- Both find sentences with `sentenceAt`. A speech tag after a quote belongs
+  to the quote's sentence, and a period after a title such as "Dr." does
+  not end one. `docs/swaps.md` says how, under **How a sentence is found**.
+- Cut filler's line, `fillerOver`, is 70 by default. It comes from a test
+  of jev-latest on made-up replies, and `docs/filler.md` says what the test
+  found, under **Why 70**. Measure again before moving it.
 - **Most of a reply a cut may take out** counts only the sentence and
   end-of-sentence cuts, so word swaps that take out a few words work as they
   did before it.
