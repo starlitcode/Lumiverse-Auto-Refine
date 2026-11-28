@@ -51,6 +51,12 @@ The card says what is wrong, if anything, under **Which Decision connection**:
 
 In each of these, every reply is refined, the same as with one model.
 
+When a call to the second model fails, the Log says why, and the reply is refined as with one model:
+
+- An account with no credits says it is out of credits.
+- A rate limit says it is a limit, and that it is not about the money in your account. Google answers a limit with "You exceeded your current quota".
+- When the provider names the limit, the Log gives its number and whether it is per minute or per day. Google's daily limit resets at midnight Pacific time.
+
 ## What the second model checks
 
 **What the second model checks** holds one statement a line. Each is about `reply`, written with backticks, which is the name the reply goes by. The reply it reads is the reply without its thinking.

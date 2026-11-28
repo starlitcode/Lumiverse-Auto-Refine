@@ -7424,8 +7424,29 @@ const PERSONAL_INSTALL = /user-scoped|cannot access this user context|Extension 
 const PERSONAL_WORDS =
   'Auto Refine is installed as Personal, so Lumiverse lets only the account that installed it use it. Ask whoever runs Lumiverse to install it as Operator, under Extensions, so every account can use it';
 
+// Credits and rate limits, said the same way as in Auto Foley. "Quota"
+// alone is a rate limit: Google answers "You exceeded your current quota"
+// for its requests per minute and per day, whatever is in the account.
+// Returns '' when the error is neither.
+function limitTrouble(raw: string, who: string): string {
+  if (/\bcredits?\b|insufficient[_ ](?:balance|funds|quota)|payment required|\b402\b|balance (?:is )?too low/i.test(raw))
+    return who + ' says your account is out of credits';
+  if (!/\b429\b|rate.?limit|too many requests|quota|resource.?exhausted/i.test(raw)) return '';
+  const notMoney = '. This is not about the money in your account';
+  const m = /\blimit:\s*(\d+)/i.exec(raw);
+  const n = m ? m[1] + ' ' : '';
+  if (/per[ _]?(?:model[ _]?per[ _]?)?day|daily/i.test(raw))
+    return who + ' reached its limit of ' + n + 'requests a day for your account' + notMoney + (/google|gemini/i.test(raw) ? '. Google\u2019s resets at midnight Pacific time' : '');
+  if (/per[ _]?minute/i.test(raw)) return who + ' reached its limit of ' + n + 'requests a minute for your account' + notMoney + '. Try again in a minute';
+  if (/concurren/i.test(raw)) return who + ' was asked for more at the same time than your plan allows. Try again in a moment';
+  if (/quota|resource.?exhausted/i.test(raw))
+    return who + ' reached its limit on requests in a minute or a day for your account' + notMoney + '. If it keeps happening, the limit may be for the day';
+  return who + ' is busy (too many requests). Try again in a moment';
+}
+
 function decisionTrouble(e: any): string {
-  const raw = String((e && e.message) || e || '').slice(0, 300);
+  // Long enough to hold the limit Google names, which comes after its links.
+  const raw = String((e && e.message) || e || '').slice(0, 700);
   if (PERSONAL_INSTALL.test(raw)) return PERSONAL_WORDS;
   if (/permission/i.test(raw) && /decision/i.test(raw))
     return 'the Decision models permission is refused. Grant it to Auto Refine in Lumiverse, under Extensions';
@@ -7436,7 +7457,9 @@ function decisionTrouble(e: any): string {
   if (/No readable API key/i.test(raw)) return 'the Decision connection has no key saved. Add its key under Decision models in Lumiverse\'s Connections panel';
   if (/timed out/i.test(raw)) return 'the second model did not answer within 30 seconds';
   if (/cancel/i.test(raw)) return 'the call to the second model was stopped';
-  return 'the second model could not be asked: ' + (raw || 'no answer');
+  const limit = limitTrouble(raw, 'the second model\'s provider');
+  if (limit) return limit + '. It said: ' + raw.slice(0, 300);
+  return 'the second model could not be asked: ' + (raw.slice(0, 300) || 'no answer');
 }
 
 // One ask of the second model, through the Decision connection picked.

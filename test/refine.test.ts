@@ -207,7 +207,7 @@ function host(
               if (!opts.jev) throw new Error("No default Decision connection configured");
               const res = await opts.jev("decisions", init);
               if (!res || !res.status) throw new Error((res && res.error) || "Decision operation failed");
-              if (res.status !== 200) throw new Error("Provider answered " + res.status + ": " + String(res.body || "").slice(0, 200));
+              if (res.status !== 200) throw new Error("Provider answered " + res.status + ": " + String(res.body || "").slice(0, 800));
               return JSON.parse(String(res.body));
             },
             listConnections: async (o?: any) => {
@@ -1086,6 +1086,26 @@ describe("two models: the second model reads the reply first", () => {
     expect(h.asked.length).toBe(1);
     expect(said(h)[0].failed).toBe(true);
     expect(said(h)[0].why).toMatch(/^the second model could not be asked: Provider answered 401/);
+  });
+
+  // A rate limit is never called being out of credits, and Google's daily
+  // limit is said with its number and when it resets.
+  test("a limit or an empty account is said in plain words", async () => {
+    const google = (metric: string) =>
+      '{"error":"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. * Quota exceeded for metric: generativelanguage.googleapis.com/' + metric + ', limit: 100, model: lantern-9. Please retry in 20.1s."}';
+    for (const [body, status, want] of [
+      [google("generate_requests_per_model_per_day"), 429, /limit of 100 requests a day.*not about the money.*midnight Pacific/],
+      [google("generate_requests_per_model_per_minute"), 429, /limit of 100 requests a minute/],
+      [google("generate_content_paid_tier_requests"), 429, /in a minute or a day/],
+      ['{"error":"Insufficient credits"}', 402, /out of credits/],
+    ] as [string, number, RegExp][]) {
+      const h = await two({}, { jev: () => ({ status, body }) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(said(h)[0].failed).toBe(true);
+      expect(said(h)[0].why).toMatch(want);
+      if (status === 429) expect(said(h)[0].why).not.toMatch(/credits/);
+    }
   });
 
   test("no default Decision connection refines anyway, and says where to set one up", async () => {
