@@ -2,7 +2,7 @@
 
 ## In short
 
-- It is off by default, and it is a beta.
+- It is off by default.
 - With **one model**, every reply is refined.
 - With **two models**, a small second model reads each reply first and says whether it needs a refine. Only the replies it picks are refined.
 - Replies that were fine already are not refined, so they cost nothing more.
@@ -11,7 +11,7 @@
 
 ## How it works
 
-A beta. With one model, which is the default, every reply the automatic pass reaches is refined. With two, a second model reads each finished reply first and says whether it needs a refine, and the refine model runs only on the replies it picks out. Replies that were fine already stop costing a refine.
+With one model, which is the default, every reply the automatic pass reaches is refined. With two, a second model reads each finished reply first and says whether it needs a refine, and the refine model runs only on the replies it picks out. Replies that were fine already stop costing a refine.
 
 The second model is a small scoring model, called a decision model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
@@ -35,7 +35,7 @@ First, in Lumiverse:
 Then, on Auto Refine's Model tab, in **One model or two**:
 
 1. Set **How many models** to two.
-2. Under **Which Decision connection**, keep **Your default Decision connection**, or pick one of yours. The list shows each connection's name and model. The first choice names your default connection, and follows it if you change your default in Lumiverse. When your only connection is the default, the list shows only this first choice.
+2. Under **Which Decision connection**, keep **Your default Decision connection**, or pick one of yours. It shows while two models are picked. [Cut filler](filler.md) uses the same one, and has the same row under its switch. The list shows each connection's name and model. The first choice names your default connection, and follows it if you change your default in Lumiverse. When your only connection is the default, the list shows only this first choice.
 3. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
 Two-model mode needs the **Decision models** permission. Lumiverse asks for it after updating to a version that uses it.

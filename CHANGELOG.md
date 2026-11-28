@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.62.0
+
+_2026-11-28_
+
+### Added
+
+- **Cut filler says when its Decision connection cannot be asked.** While Cut filler is on, a line under its **Which Decision connection** says what is wrong, such as no Decision connection set up or the one picked being gone, and that Cut filler cuts nothing until then.
+
+### Changed
+
+- **Two models is no longer a beta.** The word is gone from **How many models**, the card and the docs.
+- **Which Decision connection for Cut filler is under its switch.** It shows under **Cut filler from each reply** on the Limits tab while Cut filler is on. On the Model tab, it now shows only while **How many models** is two. Both rows are the same setting, so a connection picked in one is picked in the other.
+
+---
+
 ## 1.61.0
 
 _2026-11-28_

@@ -19,7 +19,7 @@
 4. Switch on **Cut filler from each reply**.
 5. Leave **Cut when it is at least this sure (%)** at 70 to start. A lower number cuts more sentences, and more of them by mistake.
 6. Leave **Cut an end when it is at least this sure (%)** at 60 to start. It is the same kind of number, for the end of a sentence.
-7. To use a Decision connection other than your default one, pick it under **Which Decision connection**, on the **Model** tab. It shows while Cut filler is on.
+7. To use a Decision connection other than your default one, pick it under **Which Decision connection**, straight under the switch. It is the same setting as the one for two models on the **Model** tab.
 8. To see each reply's cuts before they are saved, turn on **Ask before cutting**.
 9. The next reply is checked. The Log shows each sentence that was cut, and how sure the model was.
 
@@ -168,7 +168,7 @@ Cut filler goes first, then your [Word swaps](swaps.md), in the same write. One 
 
 ## When it cannot ask
 
-The reply is left as it was, and the reason is said in plain words. A notification says it the first time, and the Log says it every time. The reasons are:
+The reply is left as it was, and the reason is said in plain words. A notification says it the first time, and the Log says it every time. While Cut filler is on, a line under **Which Decision connection** on the card says it too. The reasons are:
 
 - no Decision connection is set up, or none is the default
 - the connection picked under **Which Decision connection** is gone

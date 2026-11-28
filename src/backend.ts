@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.61.0';
+const VERSION = '1.62.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -7386,7 +7386,7 @@ interface JevScore {
 interface JevVerdict {
   refine: boolean;
   // The second model could not be asked, or sent back nothing to go on. The
-  // reply is refined anyway: the beta failing should cost a call, not a refine.
+  // reply is refined anyway: the second model failing costs a call, not a refine.
   failed?: boolean;
   why?: string;
   scores?: JevScore[];

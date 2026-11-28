@@ -190,7 +190,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
-- **One model or two** is a beta. With two, a small second model checks each new reply first, and only the replies that need it are refined. It is asked through one of your Decision connections in Lumiverse. It has its own checks and line, and every text it sends is in a box you can change. See [Two models](two-models.md).
+- **One model or two.** With two, a small second model checks each new reply first, and only the replies that need it are refined. It is asked through one of your Decision connections in Lumiverse. It has its own checks and line, and every text it sends is in a box you can change. See [Two models](two-models.md).
 
 ## How long it waits
 
@@ -282,7 +282,7 @@ The same rules are used in Auto Retry and Auto Foley.
 - **Cut filler from each reply** is off by default. On, each new reply's sentences go to your Decision model in one call, and the ones it is sure are filler are taken out. It costs one Decision call per reply.
   - Under it: **Ask before cutting**, **Cut when it is at least this sure (%)**, **Leave dialogue alone**, **Most of a reply it may take out (%)**, **What it asks about each sentence**, with **Use the built-in text**, and **Trim the end of a sentence**, on by default.
   - Under **Trim the end of a sentence**: **Cut an end when it is at least this sure (%)**, 60 by default, and **What it asks about the end of a sentence**, with **Use the built-in text**. See [The settings](filler.md#the-settings).
-  - It asks through **Which Decision connection**, on the Model tab, or your default Decision connection.
+  - Under it: **Which Decision connection**, the same setting as on the Model tab. Empty uses your default Decision connection. If it cannot be asked, a line under it says why.
 
 ## Log
 

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.61.0";
+const VERSION = "1.62.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -774,10 +774,10 @@ const CONFIG = {
     refineGap: 0,
     // One model refines every reply. Two has a small scoring model read a
     // reply first and say whether it needs a refine, so the refine model runs on
-    // the replies that do. A beta, and off until asked for.
+    // the replies that do. Off until asked for.
     judgeMode: "one",
-    // The Decision connection the second model is asked through. Empty uses
-    // your default Decision connection in Lumiverse.
+    // The Decision connection the second model and Cut filler are asked
+    // through. Empty uses your default Decision connection in Lumiverse.
     judgeConnection: "",
     // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
@@ -2456,7 +2456,7 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "one", label: "One: every reply is refined" },
-            { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
+            { value: "two", label: "Two: a second model picks the replies to refine" },
         ],
         hint: "With two, a second model reads each reply first, and only the ones it picks are refined. It uses a Decision connection.",
     },
@@ -2467,8 +2467,9 @@ const JUDGE_FIELDS = [
         label: "Which Decision connection",
         type: "pick",
         options: [],
-        // Two models and Cut filler both ask through it.
-        when: (c) => c.judgeMode === "two" || !!c.fillerOn,
+        // Cut filler asks through it too, and has its own row for it, under
+        // its switch. See FILLER_CONNECTION.
+        when: (c) => c.judgeMode === "two",
         hint: "Set these up under Decision models in Lumiverse's Connections panel. Lumiverse keeps the key.",
     },
     {
@@ -2620,6 +2621,18 @@ const COST_FIELDS = [
     },
 ];
 // The rows under Cut filler from each reply, on the Limits tab.
+// Cut filler asks through the same Decision connection as two models, so
+// this row is the same setting as the one on the Model tab. It sits under
+// Cut filler's switch, so Cut filler shows its connection with one model too.
+const FILLER_CONNECTION = {
+    key: "judgeConnection",
+    label: "Which Decision connection",
+    type: "pick",
+    options: [],
+    needs: { key: "fillerOn" },
+    under: true,
+    hint: "Cut filler asks through it. The same one is used for two models, on the Model tab.",
+};
 const FILLER_FIELDS = [
     {
         key: "fillerAsk",
@@ -11307,12 +11320,13 @@ export function setup(ctx, overrides) {
     });
     // What stops the second model being asked, in words, or "" when nothing
     // does. Every one of these leaves each reply refined as it is with one model.
-    function decisionProblem() {
-        const then = " Until then, every reply is refined as it is with one model.";
+    // What stops the Decision connection being asked, in plain words, or
+    // empty. `then` says what happens meanwhile, for the card it is shown on.
+    function decisionProblem(then = " Until then, every reply is refined as it is with one model.") {
         if (decisions.state === "old")
-            return "This Lumiverse has no Decision connections for extensions. Update Lumiverse to use two models." + then;
+            return "This Lumiverse has no Decision connections for extensions. Update Lumiverse to use them." + then;
         if (decisions.state === "refused" || (!hasPerm("decisions") && granted))
-            return "The Decision models permission is refused, so the second model cannot be asked." + then;
+            return "The Decision models permission is refused, so no Decision model can be asked." + then;
         if (decisions.state === "failed")
             return "Could not list your Decision connections: " + (decisions.why || "no reason given") + "." + then;
         if (decisions.state !== "ok")
@@ -11329,7 +11343,7 @@ export function setup(ctx, overrides) {
         return "";
     }
     function buildJudgeCard() {
-        const wrap = card("One model or two", "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
+        const wrap = card("One model or two", "With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two" : "one");
         const checksAt = JUDGE_FIELDS.findIndex((f) => f.key === "judgeChecks");
         for (const f of JUDGE_FIELDS.slice(0, checksAt))
             wrap.appendChild(fieldRow(f));
@@ -11881,6 +11895,14 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "Off by default. On, each new reply's sentences go to your Decision model in one call, which costs one Decision call per reply.",
         }));
+        // Its connection first, with what is wrong with it under it. Built
+        // either way and hidden while nothing is wrong, like the one on the
+        // Model tab.
+        wrap.appendChild(fieldRow(FILLER_CONNECTION));
+        const fillerThen = " Until then, Cut filler cuts nothing.";
+        const fillerProblem = bad(decisionProblem(fillerThen) || " ");
+        fillerProblem.setAttribute("data-arf-decision", "filler");
+        wrap.appendChild(hangsOff(fillerProblem, () => !!cfg.fillerOn && !!decisionProblem(fillerThen), "filler decision problem"));
         for (const f of FILLER_FIELDS) {
             wrap.appendChild(fieldRow(f));
             // Each question's button for the built-in text sits straight under its box.
@@ -11889,7 +11911,7 @@ export function setup(ctx, overrides) {
             if (f.key === "fillerEndCheck")
                 wrap.appendChild(builtInRow("fillerEndCheck", FILLER_END_CHECK, "What it asks about the end of a sentence", "fillerendcheck", () => !!cfg.fillerOn && !!cfg.fillerEnds));
         }
-        const where = note("It asks through Which Decision connection, on the Model tab, or your default Decision connection. The Log shows each cut and how sure it was.");
+        const where = note("The Log shows each cut and how sure it was.");
         where.setAttribute("data-arf-filler-where", "1");
         wrap.appendChild(hangsOff(where, "fillerOn", "filler connection note"));
         return wrap;

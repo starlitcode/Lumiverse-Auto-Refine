@@ -148,7 +148,9 @@ Two skills are available. Load them before starting work.
 - Word swaps call no model. They are matched in code, on the server.
 - Cut filler asks the Decision connection in `judgeConnection`, the same one
   two models use, with one `noul` question for each sentence in one call.
-  **Which Decision connection** shows while either one is on.
+  **Which Decision connection** shows on the Model tab while two models
+  are picked, and under Cut filler's switch while it is on. Both rows are
+  the same setting.
 - Cut filler's question is in the panel, **What it asks about each
   sentence**, with `{{sentence}}` where each sentence goes, and **Use the
   built-in text** to go back. Nothing else is sent with it but the reply.

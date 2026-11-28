@@ -65,7 +65,7 @@ More in [What it refuses to save](docs/guardrails.md).
 | --- | --- |
 | **Prompt** | The request, block by block, the macros, and your presets |
 | **Context** | How much of the chat and lorebook goes in, and a preview of what is sent |
-| **Model** | Which connection refines, thinking, the timeout, samplers, and two models (beta) |
+| **Model** | Which connection refines, thinking, the timeout, samplers, and two models |
 | **Limits** | What it protects, what it refuses to save, and what it does before it writes |
 | **Log** | What is happening now, what it did, what the last refine cost, and a bug report button |
 | **Setup** | This chat, alerts, the optional buttons, import and export, and resetting |
@@ -79,7 +79,7 @@ A refine is a second model call on every reply it refines. To spend less:
 - **Refine using** (Model tab): point it at a cheaper model than the one you chat with.
 - **Let it think first** (Model tab): off by default. Rewriting does not need a reasoning model.
 - **How much it is told** (Context tab): less chat history means a cheaper call.
-- **Two models** (Model tab, beta): a small second model, through one of your Decision connections, checks each reply first, so only the ones that need it are refined. It can be wrong, so a reply that needs a refine is sometimes left alone. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
+- **Two models** (Model tab): a small second model, through one of your Decision connections, checks each reply first, so only the ones that need it are refined. It can be wrong, so a reply that needs a refine is sometimes left alone. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
 
 **Several rewrites at once** (Limits tab) costs more, because each rewrite it writes is a whole call. It is off by default.
 
@@ -115,7 +115,7 @@ All four change only a line the model could quote as breaking a rule. The two fo
 - [What it refuses to save](docs/guardrails.md): the checks on what comes back
 - [Word swaps](docs/swaps.md): words, phrases and sentences replaced or taken out in each reply, with no model call
 - [Cut filler](docs/filler.md): sentences your Decision model is sure are filler, taken out of each reply
-- [Two models](docs/two-models.md): a beta where a second model picks which replies to refine
+- [Two models](docs/two-models.md): a second model picks which replies to refine
 
 **About it**
 

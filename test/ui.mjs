@@ -17015,7 +17015,7 @@ for (const [label, viewport, touch, zoom] of [
   await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page, errors) => {
     await goTab(page, "Limits");
     await settle(page);
-    const rows = ["fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck", "fillerEnds", "fillerEndOver", "fillerEndCheck"];
+    const rows = ["judgeConnection", "fillerAsk", "fillerOver", "fillerTalk", "fillerCutMax", "fillerCheck", "fillerEnds", "fillerEndOver", "fillerEndCheck"];
     const seen = async () => {
       const out = {};
       for (const k of rows) out[k] = await onScreen(page, k);
@@ -17118,12 +17118,34 @@ for (const [label, viewport, touch, zoom] of [
     }, touch);
     ok(label + ": nothing runs off the side", !look.sideways && !look.over.length, JSON.stringify(look));
     if (touch) ok(label + ": every control is at least 32 pixels high", look.small.length === 0, JSON.stringify(look.small));
-    // Which Decision connection, on the Model tab, shows while Cut filler is
-    // on, with one model.
+    // With one model, Which Decision connection is under Cut filler only.
+    ok(label + ": Which Decision connection shows under Cut filler while it is on", await onScreen(page, "judgeConnection"));
     await goTab(page, "Model");
     await settle(page);
     await page.waitForTimeout(300);
-    ok(label + ": Which Decision connection shows on the Model tab while Cut filler is on", await onScreen(page, "judgeConnection"));
+    ok(label + ": with one model, Which Decision connection does not show on the Model tab", !(await onScreen(page, "judgeConnection")));
+    ok(label + ": no console errors", !errors.length, errors.slice(0, 2).join("; "));
+  });
+}
+
+console.log("\nCut filler says when its Decision connection cannot be asked");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 860 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  await inTab(browser, { viewport, touch, saved: { enabled: true, fillerOn: true, judgeConnection: "dc-9" } }, async (page, errors) => {
+    await goTab(page, "Limits");
+    await settle(page);
+    // The account's Decision connections, as the backend lists them. Made up,
+    // and without the one picked.
+    await page.evaluate(async () => {
+      window.__fromBackend({ type: "decision_connections", requestId: "x", state: "ok", list: [{ id: "dc-1", name: "Quick checks", provider: "openrouter", model: "~typesafe/jev-latest", isDefault: true, hasKey: true }] });
+      await new Promise((r) => setTimeout(r, 60));
+    });
+    await settle(page);
+    await page.waitForTimeout(300);
+    const said = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-decision="filler"]');
+      return n && n.offsetParent ? n.textContent : "";
+    });
+    ok(label + ": a picked connection that is gone is said under Cut filler, with what happens meanwhile", /is gone/.test(said) && /Cut filler cuts nothing/.test(said), said);
     ok(label + ": no console errors", !errors.length, errors.slice(0, 2).join("; "));
   });
 }
