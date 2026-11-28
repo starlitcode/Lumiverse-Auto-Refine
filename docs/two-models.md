@@ -240,7 +240,7 @@ The refine model is told the same. **Checks Found** calls each check a lead, and
 
 ## When it cannot answer
 
-The reply is refined, the same as with one model. This happens when there is no Decision connection to use, the permission is refused, the key is missing or refused, the account has no credit, the provider is down, it takes over 30 seconds, or the answer has nothing usable in it. The Log says which, with the provider's own message where Lumiverse passes one on. The beta failing costs you a refine you might not have needed, never a refine you did.
+The reply is refined, the same as with one model. This happens when there is no Decision connection to use, the permission is refused, the key is missing or refused, the account has no credit, the provider is down, it takes over 30 seconds, or the answer has nothing usable in it. The Log says which, with the provider's own message where Lumiverse passes one on. The second model failing costs you a refine you might not have needed, never a refine you did.
 
 ## Reading what it decided
 
