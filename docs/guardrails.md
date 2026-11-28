@@ -255,6 +255,8 @@ Lumiverse writes a failed call with the provider's status in parentheses, such a
 
 It never waits on a wrong key, a model that does not exist, a missing permission, an account with no balance or quota left, a daily limit that only comes back the next day, or a prompt too long for the model. Waiting cannot fix those.
 
+A limit per minute is waited on, such as Google's "requests_per_model_per_minute". Google's answer for one also says to check your plan and billing details. That alone would read as an account problem, so a limit named per minute is read first.
+
 Auto Retry reads errors the same way, so the two extensions agree on which errors are worth trying again.
 
 How long it waits:
