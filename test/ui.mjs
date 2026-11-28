@@ -6430,6 +6430,36 @@ console.log("\nthe bigger editor");
     ok("and lets you take lines out before it is copied", open.editable);
     ok("and does not focus the box, so no keyboard pops up", !open.focused);
 
+    // The edge, from four thin screenshots of the border line and the 4
+    // pixels outside it, with the mouse away, pointed at the box, and with
+    // the box focused. The padding inside is left out, since scrolled text
+    // shows in it.
+    const edge = async (sel) => {
+      const b = await page.locator(sel).first().boundingBox();
+      const x = Math.max(0, b.x - 4), y = Math.max(0, b.y - 4), w = b.width + 8, h = b.height + 8;
+      const shots = [];
+      for (const clip of [{ x, y, width: w, height: 5 }, { x, y: y + h - 5, width: w, height: 5 }, { x, y, width: 5, height: h }, { x: x + w - 5, y, width: 5, height: h }])
+        shots.push(await page.screenshot({ clip }));
+      return Buffer.concat(shots);
+    };
+    const looks = async (sel) => {
+      await page.mouse.move(1, 1);
+      await page.waitForTimeout(350);
+      const away = await edge(sel);
+      const b = await page.locator(sel).first().boundingBox();
+      await page.mouse.move(b.x + b.width / 2, b.y + Math.min(40, b.height / 2));
+      await page.waitForTimeout(350);
+      const pointed = await edge(sel);
+      await page.mouse.move(1, 1);
+      await page.evaluate((sel) => document.querySelector(sel).focus(), sel);
+      await page.waitForTimeout(350);
+      const focused = await edge(sel);
+      await page.evaluate((sel) => document.querySelector(sel).blur(), sel);
+      return { pointed: !away.equals(pointed), focused: !away.equals(focused) };
+    };
+    const debugEdge = await looks(".arf-over textarea");
+    ok("its edge does not light up when pointed at or focused, as a bug report box", !debugEdge.pointed && !debugEdge.focused, JSON.stringify(debugEdge));
+
     await page.evaluate(() => {
       const ta = document.querySelector(".arf-over textarea");
       ta.value = "edited in the big editor";
@@ -6443,6 +6473,19 @@ console.log("\nthe bigger editor");
     await page.waitForTimeout(400);
     const shut = await page.evaluate(() => !document.querySelector(".arf-over"));
     ok("and closes, and is gone once it has faded", shut);
+
+    // A box in the panel that does light up when pointed at, so the
+    // screenshots above are known to be able to show it.
+    await goTab(page, "Limits");
+    await settle(page);
+    await page.evaluate(() => {
+      const f = Array.from(document.querySelectorAll("#drawer .arf-field")).find((n) => n.getClientRects().length && !n.readOnly && n.type !== "search" && n.tagName !== "SELECT");
+      f.setAttribute("data-edge-probe", "1");
+      f.scrollIntoView({ block: "center" });
+    });
+    await page.waitForTimeout(300);
+    const control = await looks('[data-edge-probe="1"]');
+    ok("a box in the panel does light up when pointed at, so the screenshots can show it", control.pointed, JSON.stringify(control));
   });
   ok("no errors in the big editor", errors.length === 0, errors.join("\n         "));
 }

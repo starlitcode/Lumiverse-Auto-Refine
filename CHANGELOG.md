@@ -16,6 +16,10 @@ _2026-11-27_
 - **Cut an end when it is at least this sure (%)**, under **Trim the end of a sentence**, 60 by default. In a test with jev-latest, filler ends scored from 64% to 78%, and other ends 55% at most. See [Why 60 for an end](docs/filler.md#why-60-for-an-end).
 - **What it asks about the end of a sentence**, under **Trim the end of a sentence**, with `{{end}}` where the end goes and `{{sentence}}` for the whole sentence, and **Use the built-in text** to go back.
 
+### Changed
+
+- **The Debug info editor has no highlight.** The editor that **Read and edit it first** opens, under **Reporting a problem** on the Log tab, no longer lights up its border when you point at it with a mouse. It already had no highlight while you type in it.
+
 ---
 
 ## 1.60.0

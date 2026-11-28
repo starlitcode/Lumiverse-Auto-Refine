@@ -6313,7 +6313,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@media (hover: hover){" +
     ".arf-segbtn:not([aria-pressed=true]):hover{background:var(--lumiverse-fill-subtle,rgba(128,128,128,.08))}" +
     ".arf-box:hover:not(:disabled){box-shadow:0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
-    ".arf-field:hover:not(:focus):not(:disabled):not([readonly]){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+    ".arf-field:hover:not(:focus):not(:disabled):not([readonly]):not(.arf-bigta){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
     "}" +
     // A finger needs room. The small round buttons grow to at least 32
     // pixels. The switches grow below, with the other sizes for a
@@ -6567,11 +6567,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // scrolls as one, rather than in a few lines at a time.
     ".arf-bigdiff{flex:1;min-height:0;overflow-y:auto}" +
     ".arf-bigdiff .arf-scroll{max-height:none;overflow:visible}" +
-    // Nothing on focus here, not even the border change the small boxes get.
-    // The editor is one box filling the screen, opened on purpose, with
-    // nothing to tab between: a mark saying which box has focus answers a
-    // question nobody was asking, and at this size it draws a line down the
-    // whole window.
+    // Nothing on focus or on hover here, not even the border change the small
+    // boxes get. The editor is one box filling the screen, opened on purpose,
+    // with nothing to tab between: a mark saying which box has focus answers
+    // a question nobody was asking, and at this size it draws a line down the
+    // whole window. The hover rule for boxes leaves .arf-bigta out.
     "textarea.arf-bigta:focus,textarea.arf-bigta:focus-visible{outline:none;box-shadow:none;" +
     "border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The button this extension puts on a message and in the input bar. Styled
