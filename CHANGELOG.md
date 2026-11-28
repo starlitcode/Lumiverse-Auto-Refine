@@ -14,8 +14,13 @@ _2026-11-28_
 
 - **Cut filler says when its Decision connection cannot be asked.** While Cut filler is on, a line under its **Which Decision connection** says what is wrong, such as no Decision connection set up or the one picked being gone, and that Cut filler cuts nothing until then.
 
+### Fixed
+
+- **The Log names an end cut as a filler cut.** An end of a sentence that Cut filler took out was listed as a word swap "with no model call", though the Decision model was asked.
+
 ### Changed
 
+- **A reply Cut filler cut brings up the card.** The before and after card, with **Put it back**, now comes up when Cut filler took something out of a reply on its own, since it can take out a whole sentence. Word swaps on their own still only show on the tab and in the Log.
 - **Two models is no longer a beta.** The word is gone from **How many models**, the card and the docs.
 - **Which Decision connection for Cut filler is under its switch.** It shows under **Cut filler from each reply** on the Limits tab while Cut filler is on. On the Model tab, it now shows only while **How many models** is two. Both rows are the same setting, so a connection picked in one is picked in the other.
 

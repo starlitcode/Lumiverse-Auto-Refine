@@ -16925,6 +16925,31 @@ for (const [label, viewport, touch, zoom] of [
     await settle(page);
     const said = await page.evaluate(() => [...document.querySelectorAll("#drawer [data-arf-logline]")].map((n) => n.textContent).join(" | "));
     ok(label + ": the Log says what was swapped", /swapped words in a reply, with no model call: "jolt" for "shiver"/.test(said), said.slice(0, 200));
+    // A reply Cut filler cut, here the end of a sentence: the card comes up,
+    // since a filler cut can take out a whole sentence, and the Log calls it
+    // a filler cut.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m10",
+        before: "Pell closed the ledger, very slowly. The rain went on.",
+        after: "Pell closed the ledger. The rain went on.",
+        held: "",
+        canUndo: true,
+        kind: "swap",
+        swapped: ['"very slowly" cut from the end of a sentence as filler, 71% sure'],
+        swiped: false,
+      });
+    });
+    await settle(page);
+    await page.waitForTimeout(400);
+    const cutCard = await page.evaluate(() => !!document.querySelector(".arf-pop:not(.arf-leaving)"));
+    ok(label + ": a reply Cut filler cut brings up the card", cutCard, "");
+    const cutSaid = await page.evaluate(() => [...document.querySelectorAll("#drawer [data-arf-logline]")].map((n) => n.textContent).join(" | "));
+    ok(label + ": the Log calls an end cut a filler cut", /cut filler from a reply with the Decision model: "very slowly" cut from the end of a sentence/.test(cutSaid), cutSaid.slice(-240));
+    await page.evaluate(() => { const c = document.querySelector(".arf-pop [data-arf-pop-close], .arf-pop .arf-x"); if (c) c.click(); });
+    await page.waitForTimeout(400);
     // Ask before swapping: under the switch, and the swaps wait as a question.
     await goTab(page, "Limits");
     await settle(page);

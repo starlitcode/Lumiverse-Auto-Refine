@@ -193,6 +193,7 @@ Swaps are not made:
 - A swap made in the same write as a refine is undone with the refine.
 - A swap on a reply that was refined earlier keeps the text from before the refine. One **Put it back** undoes both.
 - A swap made on its own does not bring up a card or a notification, since a list of swaps can change most replies. The Log says what was swapped.
+- A reply that [Cut filler](filler.md) cut does bring up the before and after card, since a filler cut can take out a whole sentence.
 - A swap is never added as a swipe, even with **Add the refine as a swipe instead of writing over the reply** on.
 
 ## How a sentence is found

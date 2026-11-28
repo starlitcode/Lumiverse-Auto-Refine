@@ -19083,6 +19083,9 @@ export function setup(ctx: Ctx, overrides?: any) {
             const wasSwap = msg.kind === "swap";
             const wasSnip = msg.kind === "snip" || wasSwap;
             const swapSaid = Array.isArray(msg.swapped) ? msg.swapped.map((x: any) => String(x)).join("; ") : "";
+            // Cut filler's cuts, of a whole sentence or of its end. Each one
+            // ends the same way in the list of what changed.
+            const filled = Array.isArray(msg.swapped) ? msg.swapped.filter((x: any) => / as filler, \d+% sure$/.test(String(x))).length : 0;
             if (!wasSnip) {
               announced = { key: String(msg.chatId) + ":" + String(msg.messageId), at: Date.now() };
               markBusy(false);
@@ -19119,8 +19122,9 @@ export function setup(ctx: Ctx, overrides?: any) {
                 for (let i = 0; i < here.length - UNDO_PER_CHAT; i++) undoable.delete(here[i]);
                 // Word swaps on their own come with every reply that has one,
                 // so they are not brought up on a card. Put it back and what
-                // changed are on the tab.
-                if (!wasSwap) showPop(undoable.get(k) as Undo);
+                // changed are on the tab. Cut filler can take out whole
+                // sentences, so a write with a filler cut in it has the card.
+                if (!wasSwap || filled > 0) showPop(undoable.get(k) as Undo);
               }
             // The badge is the point of the tab being closable: something
             // happened to your writing and you can see that without opening it.
@@ -19129,7 +19133,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               // Cut filler asks the Decision model, so the line only says no
               // model was called when there are no filler cuts in it.
               const list = Array.isArray(msg.swapped) ? msg.swapped.map((x: any) => String(x)) : [];
-              const cuts = list.filter((x: string) => / cut as filler, \d+% sure$/.test(x)).length;
+              const cuts = filled;
               const words = list.length - cuts;
               log(
                 "refine",
